@@ -151,7 +151,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     if(nrhs>2)
     {
        Array1D p_optimMask( prhs[2] );
-       if(p_optimMask.nElements > 0) 
+       if( !p_optimMask.isEmpty() ) 
        {
          if(p_optimMask.nElements != 5)
              mexErrMsgTxt("Specify for every parameter if it should be optimized. [xpos,ypos,A,BG,sigma].\n Use 0 to not optimize a parameter.");
@@ -166,22 +166,28 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     if(nrhs>3)
     {
        Array1D usePixelIntegration( prhs[3] );
-       if(usePixelIntegration.nElements > 0) 
-           usePixelIntegratedGauss = usePixelIntegration[0];
+       if( !usePixelIntegration.isEmpty() )
+       {
+//            usePixelIntegratedGauss = usePixelIntegration[0];
+           usePixelIntegratedGauss = mxIsLogicalScalarTrue(prhs[3]);
+       }
     }
     
     if(nrhs>4)
     {
        Array1D useMLE( prhs[4] );
-       if(useMLE.nElements > 0) 
-           useMLErefine = useMLE[0];
+       if( !useMLE.isEmpty() )
+       {
+//            useMLErefine = useMLE[0];
+           useMLErefine = mxIsLogicalScalarTrue(prhs[4]);
+       }
     }
     
     int hWinSize = 5;
     if(nrhs>5)
     {
         Array1D input_winsize( prhs[5] );
-        if( input_winsize.nElements > 0 )
+        if( !input_winsize.isEmpty() )
             hWinSize = int(input_winsize[0] + 0.5);
     }
     
@@ -190,7 +196,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     if(nrhs>6)
     {
         Array1D input_sigma( prhs[6] );
-        if( input_sigma.nElements > 0 )
+        if( !input_sigma.isEmpty() )
             sigma_init = input_sigma[0];
         sigma_given = true;
     }

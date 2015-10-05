@@ -94,6 +94,10 @@ function [ params ] = psfFit_Image( img, varargin )
 % negligence or otherwise) arising in any way out of the use of this software, even if advised of the
 % possibility of such damage.
 
+% Make sure logicals are passed as correct datatype
+if numel(varargin) >= 3;  varargin{3} = logical(varargin{3});  end
+if numel(varargin) >= 4;  varargin{4} = logical(varargin{4});  end
+
 % Convert img to double if neccessary
 [ params ] = mx_psfFit_Image( double(img), varargin{:} );
 

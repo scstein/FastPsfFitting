@@ -216,6 +216,10 @@ struct Array1D_t
         return ptr[pos]; 
     }
     
+    bool isEmpty() const
+    {
+      return nElements==0;   
+    }
     
     //Attributes
     Type* ptr;
@@ -310,6 +314,11 @@ struct Array2D_t
     Type& operator()(int iRow, int iCol)
     {
         return *(ptr + iCol*nRows + iRow);
+    }
+    
+    bool isEmpty() const
+    {
+      return nElements==0;   
     }
     
     // Attributes
@@ -410,6 +419,11 @@ struct Array3D_t
     Type& operator()(int iRow, int iCol, int iZ)
     {
        return *(ptr + iZ*nRowsXnCols + iCol*nRows + iRow); 
+    }
+    
+    bool isEmpty() const
+    {
+      return nElements==0;   
     }
     
     // Attributes
