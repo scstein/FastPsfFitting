@@ -167,7 +167,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
        if( !useMLE.isEmpty() )
        {
            //  useMLErefine = useMLE[0];
-           usePixelIntegratedGauss = mxIsLogicalScalarTrue(prhs[4]);
+           useMLErefine = mxIsLogicalScalarTrue(prhs[4]);
        }
     }
     

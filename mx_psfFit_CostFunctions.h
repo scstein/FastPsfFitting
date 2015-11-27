@@ -217,7 +217,7 @@ public:
             for(unsigned int iRow = 0; iRow<I_.nRows; ++iRow)
             {
                 model_val = A*xVals[iCol]*yVals[iRow] + BG;
-                cost = I_(iRow,iCol) - model_val;
+                cost -= I_(iRow,iCol) * log(model_val + 1e-14) - model_val;
             }
         
         delete[] xVals;
