@@ -84,10 +84,10 @@ int round_positive(double x)
 // %   img        - Image to fit to.
 // %   param_init - Initial values PxN to fit N spot candidates in the given image with
 // %                initial conditions for P parameters. At least position [xpos; ypos] 
-// %                must be specified (P>=2). You can specify up to [xpos;ypos;A;BG;sigma]. 
+// %                must be specified (P>=2). You can specify up to [xpos;ypos;A;BG;q_1;q_2;q_3]. 
 // %                If negative values are given, the fitter estimates a value for that parameter.
-// %   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma]. 
-// %                Parameters with value 'false' are not fitted. | default: ones(5,1) -> 'optimize all'
+// %   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,q_1,q_2,q_3]. 
+// %                Parameters with value 'false' are not fitted. | default: ones(7,1) -> 'optimize all'
 // %   useIntegratedGauss - Wether to use pixel integrated gaussian or not | default: 'false'
 // %   useMLErefine - Use Poissonian noise based maximum likelihood estimation after
 // %                  least squares fit. Make sure to input image intensities in photons 
@@ -99,7 +99,7 @@ int round_positive(double x)
 // %
 // % Output
 // %   params     -  Fitted parameters 6xN. Columns are in order
-// %                 [xpos; ypos; A; BG; sigma; exitflag].
+// %                 [xpos; ypos; A; BG; q_1; q_2; q_3; exitflag].
 // %             
 // %           The last row 'exitflag' returns the state of optimizer. 
 // %           Positive = 'good'. Negative = 'bad'.
@@ -138,27 +138,27 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     
     int nr_candidates = param_init.nCols;
     int nr_given_params = param_init.nRows;
-    std::vector<int> param_optimMask(5, 1); // default all 1's: optimize every parameter
+    std::vector<int> param_optimMask(7, 1); // default all 1's: optimize every parameter
     bool usePixelIntegratedGauss = false;
     bool useMLErefine = false;
     
     if( param_init.nElements == 0 )
-        mexErrMsgTxt("Feed me at least one spot candidate! Specify [xpos;ypos]  or [xpos;ypos;A;BG;sigma]");
+        mexErrMsgTxt("Feed me at least one spot candidate! Specify [xpos;ypos]  or [xpos;ypos;A;BG;q_1;q_2;q_3]");
     
     if( nr_given_params < 2)
-        mexErrMsgTxt("Specify initial condition for at least position [xpos,ypos]! Or speficy in order [xpos;ypos;A;BG;sigma]. \n Use negative values for parameters you don't want to specify!");
+        mexErrMsgTxt("Specify initial condition for at least position [xpos,ypos]! Or speficy in order [xpos;ypos;A;BG;q_1;q_2;q_3]. \n Use negative values for parameters you don't want to specify!");
         
     if(nrhs>2)
     {
        Array1D p_optimMask( prhs[2] );
        if( !p_optimMask.isEmpty() ) 
        {
-         if(p_optimMask.nElements != 5)
-             mexErrMsgTxt("Specify for every parameter if it should be optimized. [xpos,ypos,A,BG,sigma].\n Use 0 to not optimize a parameter.");
+         if(p_optimMask.nElements != 7)
+             mexErrMsgTxt("Specify for every parameter if it should be optimized. [xpos,ypos,A,BG,q_1,q_2,q_3].\n Use 0 to not optimize a parameter.");
          else
          {
-            for(int iParam=0; iParam<5; ++iParam)
-                param_optimMask[iParam] = p_optimMask[iParam];
+            for(int iParam=0; iParam<7; ++iParam)
+                param_optimMask[iParam] = (int)(p_optimMask[iParam]);
          }        
        }       
     }    
@@ -205,7 +205,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     
        ///  --  Allocate MATLAB output memory -- //
     const int nDims = 2; // Number of dimensions for output
-    mwSize dim_out0[nDims] = { 6, nr_candidates }; // nr_param +1 (due to errorflag)
+    mwSize dim_out0[nDims] = { 8, nr_candidates }; // nr_param +1 (due to errorflag)
     plhs[0] = mxCreateNumericArray( nDims, dim_out0 , mxDOUBLE_CLASS, mxREAL);
     // fitted parameter values
     Array2D fin_params ( plhs[0] ); // Map access to output
@@ -257,15 +257,19 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
         }
         
         // Copy intital conditions
-        std::vector<double> p_init(5);
+        std::vector<double> p_init(7);
         p_init[0] = param_init(0,iCand);
         p_init[1] = param_init(1,iCand);        
         p_init[2] = (nr_given_params == 3) ?  param_init(2,iCand):-1;
         p_init[3] = (nr_given_params == 4) ?  param_init(3,iCand):-1;
         p_init[4] = (nr_given_params == 5) ?  param_init(4,iCand):-1;
+		p_init[5] = (nr_given_params == 6) ?  param_init(5,iCand):-1;
+		p_init[6] = (nr_given_params == 7) ?  param_init(6,iCand):0;
         
         if(sigma_given) // If user gave extra sigma value this takes precedence
-            p_init[4] = sigma_init;
+		{ 
+            p_init[4] = 1./(2.*sigma_init*sigma_init);
+		}
 
         // Fit image, collect results
         std::vector<double> results = fitPSF(sub_img, xCoords, yCoords, p_init, param_optimMask, usePixelIntegratedGauss, useMLErefine);
@@ -275,8 +279,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
         fin_params(1,iCand) = results[1]; // y
         fin_params(2,iCand) = results[2]; // A
         fin_params(3,iCand) = results[3]; // BG
-        fin_params(4,iCand) = results[4]; // sigma        
-        fin_params(5,iCand) = results[5]; // exitflag
+        fin_params(4,iCand) = results[4]; // q1 (related to sigma_x)        
+		fin_params(5,iCand) = results[5]; // q2 (related to sigma_y)
+		fin_params(6,iCand) = results[6]; // q3 (related to angle)
+        fin_params(7,iCand) = results[7]; // exitflag
     }
     
      

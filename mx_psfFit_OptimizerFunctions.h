@@ -70,12 +70,12 @@ using ceres::GradientProblemSolver;
  *   img - image to fit to
  *   xCoords - vector of x-coordinates to use (length must be img.nCols)
  *   yCoords - vector of y-coordinates to use (length must be img.nRows)
- *   param_init - 5 element vector of initial parameters [xpos,ypos,A,BG,sigma]. For negative values the function estimates the initial guess from the image.
- *   param_optimizeMask - 5 element vector which is >0 for every element that should be optimized. Elements with mask <= 0 are kept constant.
+ *   param_init - 7 element vector of initial parameters [xpos,ypos,A,BG,q_1,q_2,q_3]. For negative values the function estimates the initial guess from the image.
+ *   param_optimizeMask - 7 element vector which is >0 for every element that should be optimized. Elements with mask <= 0 are kept constant.
  *   usePixelIntegratedGauss - Uses a pixel integrated gaussian model instead of a center-sampled one (slower but usually more accurate).
  *   useMLErefine - Refine least squares fit with Poissonian noise based maximum likelihood estimation.  Make sure to input image intensities in photons for this to make sense. This is computationally very expensive.
  * Output:
- *   results - 6 element vector of fitted parameters [xpos,ypos,A,BG,sigma, exitflag]. Exitflag contains the exit state of the solver, which is positive for success and negative for failure. (for more detail see getTerminationType)
+ *   results - 8 element vector of fitted parameters [xpos,ypos,A,BG,q_1,q_2,q_3, exitflag]. Exitflag contains the exit state of the solver, which is positive for success and negative for failure. (for more detail see getTerminationType)
 */   
 std::vector<double> 
 fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::vector<double>& param_init, std::vector<int>& param_optimMask, bool usePixelIntegratedGauss, bool useMLErefine = false);
@@ -84,11 +84,11 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 // Estimates are only computed for input parameters with negative values (e.g. givins xpos=-1) to the function.
 // If positive values are given, these are left untouched and taken as the initial guess.
 void
-estimateIntialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& sigma);
+estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3,std::vector<int>& param_optimMask);
 
 // Set lower and upper bounds of parameters for the optimization
 void
-setParameterBounds(Problem& problem, Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& sigma);
+setParameterBounds(Problem& problem, Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3);
 
 // Remap the termination type (enum) of the summary into an integer number
 // return: 2 - USER_SUCCESS // (cannot happen in our case)
@@ -108,19 +108,21 @@ std::vector<double>
 fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::vector<double>& param_init, std::vector<int>& param_optimMask, bool usePixelIntegratedGauss, bool useMLErefine)
 {   
     // The variables to solve for: x,y,A,BG,sigma
-    double xpos, ypos, A, BG, sigma;
+    double xpos, ypos, A, BG, q_1, q_2, q_3;
     
       /// -- Setup intial conditions -- ///          
     xpos  = param_init[0];
     ypos  = param_init[1];
     A     = param_init[2];
     BG    = param_init[3];
-    sigma = param_init[4];
+    q_1 = param_init[4];
+	q_2 = param_init[5];
+	q_3 = param_init[6];
     
-    estimateIntialConditions(img, xCoords,yCoords, xpos, ypos, A, BG, sigma);
+    estimateInitialConditions(img, xCoords,yCoords, xpos, ypos, A, BG, q_1, q_2, q_3, param_optimMask);
     
     #ifdef DEBUG   
-      std::cout << "Initial parameters [xpos,ypos,A,BG,sigma]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << sigma << "\n";
+      std::cout << "Initial parameters [xpos,ypos,A,BG,sigma]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << ", " << q_2 << ", " << q_3 << "\n";
     #endif
       
     
@@ -128,22 +130,56 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
     Problem problem;
     
     CostFunction* cost_function;
-    if(usePixelIntegratedGauss)
-        cost_function = new AutoDiffCostFunction<IntegratedGaussResidual, ceres::DYNAMIC, 1,1,1,1,1>(  new IntegratedGaussResidual(img, xCoords, yCoords), img.nElements);
-    else
-        cost_function = new AutoDiffCostFunction<SampledGaussResidual, ceres::DYNAMIC, 1,1,1,1,1>(  new SampledGaussResidual(img, xCoords, yCoords), img.nElements);
-    problem.AddResidualBlock(cost_function, NULL, &xpos, &ypos, &A, &BG, &sigma);
+		if(param_optimMask[6]==1)
+		{
+			if(usePixelIntegratedGauss)
+				cost_function = new AutoDiffCostFunction<SampledGaussAnisoAngleResidual, ceres::DYNAMIC, 1,1,1,1,1,1,1>(  new SampledGaussAnisoAngleResidual(img, xCoords, yCoords), img.nElements);
+				// not implemented yet
+				// cost_function = new AutoDiffCostFunction<IntegratedGaussAnisoAngleResidual, ceres::DYNAMIC, 1,1,1,1,1,1,1>(  new IntegratedGaussAnisoAngleResidual(img, xCoords, yCoords), img.nElements);
+			else
+				cost_function = new AutoDiffCostFunction<SampledGaussAnisoAngleResidual, ceres::DYNAMIC, 1,1,1,1,1,1,1>(  new SampledGaussAnisoAngleResidual(img, xCoords, yCoords), img.nElements);
+
+			problem.AddResidualBlock(cost_function, NULL, &xpos, &ypos, &A, &BG, &q_1, &q_2, &q_3);
+			/* fitting an anisotropic rotated Gaussian while leaving sigma_x,sigma_y,angle constant makes no sense
+			if( param_optimMask[4] == 0 )  problem.SetParameterBlockConstant(&q_1);
+			if( param_optimMask[5] == 0 )  problem.SetParameterBlockConstant(&q_2);
+			if( param_optimMask[6] == 0 )  problem.SetParameterBlockConstant(&q_3); */
+		}
+		else
+		{
+			if(param_optimMask[5]==1)
+			{
+				if(usePixelIntegratedGauss)
+					cost_function = new AutoDiffCostFunction<IntegratedGaussAnisoResidual, ceres::DYNAMIC, 1,1,1,1,1,1>(  new IntegratedGaussAnisoResidual(img, xCoords, yCoords), img.nElements);
+				else
+					cost_function = new AutoDiffCostFunction<SampledGaussAnisoResidual, ceres::DYNAMIC, 1,1,1,1,1,1>(  new SampledGaussAnisoResidual(img, xCoords, yCoords), img.nElements);
+
+				problem.AddResidualBlock(cost_function, NULL, &xpos, &ypos, &A, &BG, &q_1, &q_2);
+				/* fitting an isotropic gaussian while leaving sigma_x,sigma_y constant makes no sense
+				if( param_optimMask[4] == 0 )  problem.SetParameterBlockConstant(&q_1);
+				if( param_optimMask[5] == 0 )  problem.SetParameterBlockConstant(&q_2); */
+			}
+			else
+			{
+				if(usePixelIntegratedGauss)
+					cost_function = new AutoDiffCostFunction<IntegratedGaussResidual, ceres::DYNAMIC, 1,1,1,1,1>(  new IntegratedGaussResidual(img, xCoords, yCoords), img.nElements);
+				else
+					cost_function = new AutoDiffCostFunction<SampledGaussResidual, ceres::DYNAMIC, 1,1,1,1,1>(  new SampledGaussResidual(img, xCoords, yCoords), img.nElements);
+
+				problem.AddResidualBlock(cost_function, NULL, &xpos, &ypos, &A, &BG, &q_1);
+				if( param_optimMask[4] == 0 )  problem.SetParameterBlockConstant(&q_1); //only when dealing with an isotropic Gaussian can we decide if sigma should be fitted or not
+			}
+		}
     
      // Keep specified parameters fixed
     if( param_optimMask[0] == 0 )  problem.SetParameterBlockConstant(&xpos);
     if( param_optimMask[1] == 0 )  problem.SetParameterBlockConstant(&ypos);        
     if( param_optimMask[2] == 0 )  problem.SetParameterBlockConstant(&A);
     if( param_optimMask[3] == 0 )  problem.SetParameterBlockConstant(&BG);
-    if( param_optimMask[4] == 0 )  problem.SetParameterBlockConstant(&sigma);
  
     
     // Set bounds of parameters///
-    setParameterBounds(problem, img, xCoords, yCoords, xpos, ypos, A, BG, sigma);
+    setParameterBounds(problem, img, xCoords, yCoords, xpos, ypos, A, BG, q_1, q_2, q_3);
     
     
         /// -- Set solver options -- ///
@@ -163,12 +199,12 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
     
     #ifdef DEBUG   
       std::cout << summary.BriefReport() << "\n";
-      std::cout << "Final parameters [xpos,ypos,A,BG,sigma]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << sigma << "\n";
+      std::cout << "Final parameters [xpos,ypos,A,BG,q_1,q_2,q_3]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << ", " << q_2 ", " << q_3 << "\n";
     #endif
       
     /// -- Output -- ///
     int exitflag = getTerminationType(summary);
-          
+        
       if(useMLErefine && exitflag>0)
       {
           int nr_optim_params = 0;
@@ -183,14 +219,40 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
           if(param_optimMask[1] > 0) {parameters[cnt] = ypos; ++cnt;}
           if(param_optimMask[2] > 0) {parameters[cnt] = A; ++cnt;}
           if(param_optimMask[3] > 0) {parameters[cnt] = BG; ++cnt;}
-          if(param_optimMask[4] > 0) {parameters[cnt] = sigma; ++cnt;}
+          if(param_optimMask[4] > 0) {parameters[cnt] = q_1; ++cnt;}
+		  if(param_optimMask[5] > 0) {parameters[cnt] = q_2; ++cnt;}
+		  if(param_optimMask[6] > 0) {parameters[cnt] = q_3; ++cnt;}
           
           // Build the problem
           ceres::FirstOrderFunction* MLE_cost_function;
-          if(usePixelIntegratedGauss)
-              MLE_cost_function = new IntegratedGauss_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, sigma);
-          else
-              MLE_cost_function = new SampledGauss_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, sigma);
+
+		  if(param_optimMask[6]==1)
+		  {
+			  if(usePixelIntegratedGauss)
+				  MLE_cost_function = new SampledGaussAnisoAngle_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, q_1, q_2, q_3);
+				  // not implemented yet
+				  // MLE_cost_function = new IntegratedGaussAnisoAngle_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, q_1, q_2, q_3);
+			  else
+				  MLE_cost_function = new SampledGaussAnisoAngle_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, q_1, q_2, q_3);
+		  }
+		  else
+		  {
+			  if(param_optimMask[5]==1)
+			  {
+				if(usePixelIntegratedGauss)
+				  MLE_cost_function = new IntegratedGaussAniso_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, q_1, q_2);
+				else
+				  MLE_cost_function = new SampledGaussAniso_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, q_1, q_2);
+			  }
+			  else
+			  {
+				  if(usePixelIntegratedGauss)
+					MLE_cost_function = new IntegratedGauss_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, q_1);
+				  else
+					MLE_cost_function = new SampledGauss_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, q_1);
+			  }
+		  }
+
           GradientProblem MLEproblem(MLE_cost_function);
 
           GradientProblemSolver::Options MLEoptions;
@@ -211,7 +273,9 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
           if(param_optimMask[1] > 0) {ypos  = parameters[cnt]; ++cnt;}
           if(param_optimMask[2] > 0) {A     = parameters[cnt]; ++cnt;}
           if(param_optimMask[3] > 0) {BG    = parameters[cnt]; ++cnt;}
-          if(param_optimMask[4] > 0) {sigma = parameters[cnt]; ++cnt;}
+          if(param_optimMask[4] > 0) {q_1 = parameters[cnt]; ++cnt;}
+		  if(param_optimMask[5] > 0) {q_2 = parameters[cnt]; ++cnt;}
+		  if(param_optimMask[6] > 0) {q_3 = parameters[cnt]; ++cnt;}
           
           // If one of the solvers returned convergence without the other one reporting failure,
           // we take the optimization as succeeded. (Sometimes the MLE will return NO_CONVERGENCE
@@ -224,19 +288,21 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 
           #ifdef DEBUG
             std::cout << MLEsummary.BriefReport() << "\n";
-            std::cout << "Final MLE parameters [xpos,ypos,A,BG,sigma]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << sigma << "\n";
+            std::cout << "Final MLE parameters [xpos,ypos,A,BG,q_1,q_2,q_3]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << ", " << q_2 << ", " << q_3 << "\n";
           #endif
           
           delete[] parameters; // Cleanup
       }
     
-    std::vector<double> results(6);
+    std::vector<double> results(8);
     results[0] = xpos;
     results[1] = ypos;
     results[2] = A;
     results[3] = BG;
-    results[4] = sigma;
-    results[5] = exitflag;
+    results[4] = q_1;
+	results[5] = q_2;
+	results[6] = q_3;
+    results[7] = exitflag;
     
     return results;
 }
@@ -244,36 +310,10 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 
 
 
-void estimateIntialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& sigma)
+void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3, std::vector<int>& param_optimMask)
 {
-    double xpos_tmp = 0, ypos_tmp = 0;
-    double img_max = 0;
-    
-    // If xpos, ypos or amplitude should be guessed, find the image maximum value and its position
-    if(xpos < 0  || ypos < 0 || A<0) 
-    {
-        for(unsigned int iCol = 0; iCol<img.nCols; ++iCol)
-            for(unsigned int iRow = 0; iRow<img.nRows; ++iRow)
-            {
-                if(img(iRow,iCol)>img_max )
-                {
-                    img_max = img(iRow,iCol);
-                    xpos_tmp = iCol;
-                    ypos_tmp = iRow;
-                }
-            }
-    }
-    
-    // Set x position guess
-    if(xpos<0)
-        xpos = xCoords[xpos_tmp];
-    
-    // Set y position guess
-    if(ypos<0)
-        ypos = yCoords[ypos_tmp];
-    
-    
-    // Background guess
+
+	// Background guess
     // -> take mean along the border pixels
     if(BG<0)
     {
@@ -300,17 +340,161 @@ void estimateIntialConditions(Array2D& img, std::vector<int>& xCoords, std::vect
             BG = BG/(2*img.nRows + 2*(img.nCols-2));
         }
     }
+
+
+	// If fitting a non-isotropic rotated Gaussian, initial parameters will be guessed by SVD
+	double m_00 = 0, m_10 = 0, m_01 = 0, m_11 = 0, m_20 = 0, m_02 = 0, img_tmp = 0, tau = 0, delta = 0, angle = 0, q_tmp, sigma_part = 0;
+	if(param_optimMask[6]==1)
+	{
+		// calculate intensity moments
+		for(unsigned int iCol = 0; iCol<img.nCols; ++iCol)
+		{
+			for(unsigned int iRow = 0; iRow<img.nRows; ++iRow)
+			{
+				img_tmp = (0<(img(iRow,iCol)-BG))?(img(iRow,iCol)-BG):0;
+				m_00 += img_tmp;
+				m_10 += iCol*img_tmp;
+				m_01 += iRow*img_tmp;
+				m_11 += iCol*iRow*img_tmp;
+				m_20 += iCol*iCol*img_tmp;
+				m_02 += iRow*iRow*img_tmp;
+			}
+		}
+
+		//normalize and build cov matrix
+		m_10 /= m_00, m_01 /= m_00, m_11 /= m_00, m_20 /= m_00, m_02 /= m_00;
+		m_20 -= m_10*m_10, m_02 -= m_01*m_01, m_11 -= m_10*m_01;
+
+
+		//calculate trace and determinant and from that, q_1 to q_3
+		tau = m_20+m_02;
+		delta = m_20*m_02-m_11*m_11;
+		angle = 0.5*atan(2*m_11/(m_20-m_02));
+
+		sigma_part = sqrt(tau*tau-4*delta);
+
+		if (tau > sigma_part) // is positive definite?
+		{
+			if (angle != 0)
+			{
+				q_1 = cos(angle)*cos(angle)/(tau+sigma_part)+sin(angle)*sin(angle)/(tau-sigma_part);
+				q_2 = sin(angle)*sin(angle)/(tau+sigma_part)+cos(angle)*cos(angle)/(tau-sigma_part);
+				q_3 = -0.5*sin(2*angle)/(tau+sigma_part)+0.5*sin(2*angle)/(tau-sigma_part);
+				if(m_20 <= m_10)
+				{
+					q_tmp = q_2;
+					q_2 = q_1;
+					q_1 = q_tmp;
+					q_3 = -q_3;
+				}
+			}
+			else
+			{
+				q_1 = 0.5/m_20;
+				q_2 = 0.5/m_02;
+				q_3 = 0;
+				if(m_20 <= m_10)
+				{
+					q_tmp = q_2;
+					q_2 = q_1;
+					q_1 = q_tmp;
+				}
+			}
+		}
+		else
+		{
+			q_1 = 0.5/(1.25*1.25);
+			q_2 = 0.5/(1.25*1.25);
+			q_3 = 0.1;
+		}
+
+
+	}
+	else if(param_optimMask[5]==1 && param_optimMask[6]==0)
+	{
+		q_3 = 0;
+		if (q_1< 0 || q_2 < 0)
+		{
+			// calculate intensity moments without angular component
+			for(unsigned int iCol = 0; iCol<img.nCols; ++iCol)
+			{
+				for(unsigned int iRow = 0; iRow<img.nRows; ++iRow)
+				{
+					img_tmp = (0<(img(iRow,iCol)-BG))?(img(iRow,iCol)-BG):0;
+					m_00 += img_tmp;
+					m_10 += iCol*img_tmp;
+					m_01 += iRow*img_tmp;
+					m_20 = iCol*iCol*img_tmp;
+					m_02 = iRow*iRow*img_tmp;
+				}
+			}
+			//normalize
+			m_10 /= m_00, m_01 /= m_00, m_20 /= m_00, m_02 /= m_00;
+			m_20 -= m_10*m_10, m_02 -= m_01*m_01;
+
+			if (0.5*(m_20+m_02) > sqrt((4*m_11*m_11+(m_20-m_02)*(m_20-m_02))/2))
+			{
+				// check largest EV
+				q_1 = 0.5/m_20;
+				q_2 = 0.5/m_02;
+				if(m_20 <= m_10)
+				{
+					q_tmp = q_2;
+					q_2 = q_1;
+					q_1 = q_tmp;
+				}
+			}
+			else
+			{
+				q_1 = 0.5/(1.25*1.25);
+				q_2 = 0.5/(1.25*1.25);
+			}
+		}
+
+	}
+	else
+	{
+		q_2 = -1;
+		q_3 = 0;
+		if (q_1<0)
+			// Standard deviation guess (not unusal for typical PSF fitting)
+			q_1 = 0.5/(1.25*1.25);
+	}
+		
+   
+    // If xpos, ypos or amplitude should be guessed, find the image maximum value and its position. For non-isotropic Gaussians, calculate centroid and eccentricity
+	double xpos_tmp = 0, ypos_tmp = 0, img_max = 0;
+    if(xpos < 0  || ypos < 0 || A < 0) 
+    {
+		for(unsigned int iCol = 0; iCol<img.nCols; ++iCol)
+		{
+			for(unsigned int iRow = 0; iRow<img.nRows; ++iRow)
+			{
+				if(img(iRow,iCol)>img_max )
+				{
+					img_max = img(iRow,iCol);
+					xpos_tmp = iCol;
+					ypos_tmp = iRow;
+				}
+			}
+		}
+    }
+    
+    // Set x position guess
+    if(xpos<0)
+        xpos = xCoords[int(xpos_tmp)];
+    
+    // Set y position guess
+    if(ypos<0)
+        ypos = yCoords[int(ypos_tmp)];
         
     // Amplitude guess
     if (A<0)
         A = img_max-BG;
-    
-    // Standard deviation guess (not unusal for typical PSF fitting)
-    if (sigma<0)
-        sigma = 1.25;
+     
 }
 
-void setParameterBounds(Problem& problem, Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& sigma)
+void setParameterBounds(Problem& problem, Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3)
 {
     problem.SetParameterLowerBound(&xpos,  0, xCoords[0]-1);
     problem.SetParameterUpperBound(&xpos,  0, xCoords[xCoords.size()-1]+1);
@@ -320,8 +504,18 @@ void setParameterBounds(Problem& problem, Array2D& img, std::vector<int>& xCoord
     problem.SetParameterUpperBound(&A,     0, 2*(A+BG));
     problem.SetParameterLowerBound(&BG,    0, 0);
     problem.SetParameterUpperBound(&BG,    0, 2*(A+BG));
-    problem.SetParameterLowerBound(&sigma, 0, 0);
-    problem.SetParameterUpperBound(&sigma, 0, max(img.nRows,img.nCols));
+    problem.SetParameterLowerBound(&q_1, 0, 0.5/std::pow(max(img.nRows,img.nCols),2));
+    //problem.SetParameterUpperBound(&q_1, 0, INF);
+	if(problem.HasParameterBlock(&q_2))
+	{
+		problem.SetParameterLowerBound(&q_2, 0, 0.5/std::pow(max(img.nRows,img.nCols),2));
+		//problem.SetParameterUpperBound(&q_2, 0, 0.INF);
+	}
+	if(problem.HasParameterBlock(&q_3))
+	{
+		//problem.SetParameterLowerBound(&q_3, 0, -INF);
+		//problem.SetParameterUpperBound(&q_3, 0, INF);
+	}
 }
 
 int getTerminationType(Solver::Summary& summary)
