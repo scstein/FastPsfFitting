@@ -34,7 +34,7 @@ end
 par_init = em_pos + 1.5*(2*rand(nr_emitters,2)-1); % As intial guess we add noise to the true values
 par_init = par_init';
 
-result_params = psfFit_Image( img, par_init ); % This is the simplest possible call, see psfFit_Image for all options
+result_params = psfFit_Image( img, par_init); % This is the simplest possible call, see psfFit_Image for all options
 
 
 % 3) Display the result

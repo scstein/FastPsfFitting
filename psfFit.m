@@ -15,15 +15,15 @@ function [ params, exitflag ] = psfFit( img, varargin )
 %   param_init - Initial values [xpos,ypos,A,BG,sigma]. If negative values
 %                are given, the fitter estimates a value for that
 %                parameter. | default: -1*ones(5,1) -> 'estimate all'
-%   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma]. 
-%                Parameters with value 'false' are not fitted. | default: ones(5,1) -> 'optimize all'
+%   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma_x,sigma_y,angle].
+%                Parameters with value 'false' are not fitted. | default: [1,1,1,1,1,0,0] -> 'optimize x,y,A,BG,sigma' (2D case)
 %   useIntegratedGauss - Wether to use pixel integrated gaussian or not | default: false
 %   useMLErefine - Use Poissonian noise based maximum likelihood estimation after
 %                  least squares fit. Make sure to input image intensities in photons 
 %                  for this to make sense. | default: false
 %
 % Output
-%   params - Final parameters [xpos,ypos,A,BG,sigma].
+%   params - Final parameters [xpos,ypos,A,BG,sigma_x,sigma_y,angle].
 %   exitflag - Return state of optimizer. Positive = 'good'. Negative = 'bad'.
 %         1 - CONVERGENCE
 %        -1 - NO_CONVERGENCE
@@ -33,7 +33,7 @@ function [ params, exitflag ] = psfFit( img, varargin )
 % http://ceres-solver.org, New BSD license.
 % Copyright 2015 Google Inc. All rights reserved.
 %
-% Author: Simon Christoph Stein
+% Author: Simon Christoph Stein, extended by Jan Thiart
 % Date: June 2015
 % E-Mail: scstein@phys.uni-goettingen.de
 % 
@@ -93,11 +93,53 @@ function [ params, exitflag ] = psfFit( img, varargin )
 % possibility of such damage.
 
 % Make sure logicals are passed as correct datatype
-if numel(varargin) >= 3;  varargin{3} = logical(varargin{3});  end
-if numel(varargin) >= 4;  varargin{4} = logical(varargin{4});  end
+if numel(varargin) >= 2 && ~isempty(varargin{2});  varargin{2} = logical(varargin{2});  end
+if numel(varargin) >= 3 && ~isempty(varargin{3});  varargin{3} = logical(varargin{3});  end
+if numel(varargin) >= 4 && ~isempty(varargin{4});  varargin{4} = logical(varargin{4});  end
 
 % Convert img to double if neccessary
+% sigma_x = varargin{1}(5);
+% sigma_y = varargin{1}(6);
+% angle = varargin{1}(7);
+% q1 = cos(angle).^2./(2*sigma_x.^2)+sin(angle).^2./(2*sigma_y.^2);
+% q2 = sin(angle).^2./(2*sigma_x.^2)+cos(angle).^2./(2*sigma_y.^2);
+% q3 = -sin(2*angle)./(4*sigma_x.^2)+sin(2*angle)./(4*sigma_y.^2);
+% varargin{1}(5:7) = [q1;q2;q3];
+
+% Set default optimization x,y,A,BG,sigma
+if( numel(varargin)<2 || isempty(varargin{2}) )
+    varargin{2} = logical([1,1,1,1,1,0,0]);
+end
+
 [ params, exitflag ] = mx_psfFit( double(img), varargin{:});
+
+% Compute sigma_x, sigma_y, angle from the output values
+param_optimizeMask = varargin{2};
+
+fitSigma_y = param_optimizeMask(6);
+fitAngle = param_optimizeMask(7);
+
+if fitAngle
+    q1 = params(5); q2 = params(6); q3 = params(7);
+    angle = 0.5*atan(2*q3./(q2-q1)); %angle towards largest eigenvector axis in radian
+    sigma_x = 1./sqrt(q1+q2-2*q3./sin(2*angle));
+    sigma_y = 1./sqrt(q1+q2+2*q3./sin(2*angle));
+    
+    % if the angle is 0 or very close to 0, calculating sigma will fail
+    if angle == 0 || sum(isnan([sigma_x,sigma_y]),2)>0;
+        sigma_x = 1./sqrt(2*q1);
+        sigma_y = 1./sqrt(2*q2);
+        angle = 0;
+    end
+    
+    params(5:7) = [sigma_x;sigma_y;angle];
+else
+    if fitSigma_y
+        params(5:6) = sqrt(0.5./params(5:6));
+    else
+        params(5) = sqrt(0.5./params(5));
+    end
+end
 
 end
 

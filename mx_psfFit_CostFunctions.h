@@ -30,6 +30,8 @@
 // % either expressed or implied, of the FreeBSD Project.
 
 #pragma once
+// stdlib
+#include <cmath>
 
 using ceres::Jet;
 
@@ -40,7 +42,7 @@ using ceres::Jet;
 // Compute the complementary error function 1-erf(x)
 // Templated for automatic differentiation with ceres
 template<typename T>
-        T erfc(T x)
+T erfc(T x)
 {
     // Accurate to 1e-7
     // constants
@@ -53,9 +55,9 @@ template<typename T>
     
     // Save the sign of x
     int sign =  (x<T(0))?-1:1;
-    x = abs(x);
+    x = ceres::abs(x);
     
-    // Abramowitz and Stegun (equations 7.1.25–28), see Wikipedia "error function"
+    // Abramowitz and Stegun (equations 7.1.25-28), see Wikipedia "error function"
     T t = T(1.0)/(T(1.0) + p*x);
     T y = T(1.0) - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*exp(-x*x);
     
@@ -186,12 +188,13 @@ struct SampledGaussAnisoAngleResidual {
 struct IntegratedGaussResidual {
     IntegratedGaussResidual(Array2D& I, std::vector<int>& x, std::vector<int>& y)
     : I_(I), x_(x), y_(y)
-    {}
+    {
+    }
     
     // Parameters x,y,A,BG,sigma
     template <typename T>
             bool operator()(const T* const xpos, const T* const ypos, const T* const A, const T* const BG, const T* const q_1, T* residual) const
-    {
+    {        
         T* xVals = new T[I_.nCols];
         T* yVals = new T[I_.nRows];
         
@@ -267,18 +270,18 @@ struct IntegratedGaussAnisoResidual {
 class SampledGauss_MLE_Cost : public ceres::FirstOrderFunction {
     
 public:
-    SampledGauss_MLE_Cost(Array2D& I, std::vector<int>& x, std::vector<int>& y, std::vector<int>& param_optimMask, double xpos_init, double ypos_init, double A_init, double BG_init, double q_1_init )
+    SampledGauss_MLE_Cost(Array2D& I, std::vector<int>& x, std::vector<int>& y, std::vector<bool>& param_optimMask, double xpos_init, double ypos_init, double A_init, double BG_init, double q_1_init )
     : I_(I), x_(x), y_(y), param_optimMask_(param_optimMask), nr_optim_params_(0), xpos_(xpos_init, 0), ypos_(ypos_init, 1), A_(A_init, 2), BG_(BG_init, 3), q_1_(q_1_init, 4)
     {
         for(int i =0; i<param_optimMask_.size(); ++i)
-            nr_optim_params_ += (param_optimMask_[i]>0);
+            nr_optim_params_ += (param_optimMask_[i]);
         
         // Set infinitesimals of constant parameters to zero
-        if(param_optimMask_[0]>0) xpos_.v[0] = 0;
-        if(param_optimMask_[1]>0) ypos_.v[1] = 0;
-        if(param_optimMask_[2]>0) A_.v[2] = 0;
-        if(param_optimMask_[3]>0) BG_.v[3] = 0;
-        if(param_optimMask_[4]>0) q_1_.v[4] = 0;
+        if(param_optimMask_[0]) xpos_.v[0] = 0;
+        if(param_optimMask_[1]) ypos_.v[1] = 0;
+        if(param_optimMask_[2]) A_.v[2] = 0;
+        if(param_optimMask_[3]) BG_.v[3] = 0;
+        if(param_optimMask_[4]) q_1_.v[4] = 0;
     }
     
     virtual bool Evaluate(const double* parameters,
@@ -287,11 +290,11 @@ public:
         
         { // grab values from parameter vector
             int cnt = 0;
-            if(param_optimMask_[0]>0){ xpos_.a  = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[1]>0){ ypos_.a  = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[2]>0){ A_.a     = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[3]>0){ BG_.a    = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[4]>0){ q_1_.a = parameters[cnt];};
+            if(param_optimMask_[0]){ xpos_.a  = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[1]){ ypos_.a  = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[2]){ A_.a     = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[3]){ BG_.a    = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[4]){ q_1_.a = parameters[cnt];};
         }
 
         if(gradient == NULL) // if only function value is requested
@@ -305,11 +308,11 @@ public:
             
             // Assign derivatives to result
             int cnt = 0;
-            if(param_optimMask_[0]>0){ gradient[cnt] = J_result.v[0]; ++cnt;};
-            if(param_optimMask_[1]>0){ gradient[cnt] = J_result.v[1]; ++cnt;};
-            if(param_optimMask_[2]>0){ gradient[cnt] = J_result.v[2]; ++cnt;};
-            if(param_optimMask_[3]>0){ gradient[cnt] = J_result.v[3]; ++cnt;};
-            if(param_optimMask_[4]>0){ gradient[cnt] = J_result.v[4]; ++cnt;};
+            if(param_optimMask_[0]){ gradient[cnt] = J_result.v[0]; ++cnt;};
+            if(param_optimMask_[1]){ gradient[cnt] = J_result.v[1]; ++cnt;};
+            if(param_optimMask_[2]){ gradient[cnt] = J_result.v[2]; ++cnt;};
+            if(param_optimMask_[3]){ gradient[cnt] = J_result.v[3]; ++cnt;};
+            if(param_optimMask_[4]){ gradient[cnt] = J_result.v[4]; ++cnt;};
         };
         
         return true;
@@ -350,7 +353,7 @@ private:
     const std::vector<int>& x_; // x coordinates
     const std::vector<int>& y_; // y coordinates
     
-    const std::vector<int>& param_optimMask_; // mask which parameters are optimized
+    const std::vector<bool>& param_optimMask_; // mask which parameters are optimized
     int nr_optim_params_;
     
     // To keep different parameters constant, we copy all initial values.
@@ -363,19 +366,19 @@ private:
 class SampledGaussAniso_MLE_Cost : public ceres::FirstOrderFunction {
     
 public:
-    SampledGaussAniso_MLE_Cost(Array2D& I, std::vector<int>& x, std::vector<int>& y, std::vector<int>& param_optimMask, double xpos_init, double ypos_init, double A_init, double BG_init, double q_1_init, double q_2_init )
+    SampledGaussAniso_MLE_Cost(Array2D& I, std::vector<int>& x, std::vector<int>& y, std::vector<bool>& param_optimMask, double xpos_init, double ypos_init, double A_init, double BG_init, double q_1_init, double q_2_init )
     : I_(I), x_(x), y_(y), param_optimMask_(param_optimMask), nr_optim_params_(0), xpos_(xpos_init, 0), ypos_(ypos_init, 1), A_(A_init, 2), BG_(BG_init, 3), q_1_(q_1_init, 4), q_2_(q_2_init, 5)
     {
         for(int i =0; i<param_optimMask_.size(); ++i)
-            nr_optim_params_ += (param_optimMask_[i]>0);
+            nr_optim_params_ += (param_optimMask_[i]);
         
         // Set infinitesimals of constant parameters to zero
-        if(param_optimMask_[0]>0) xpos_.v[0] = 0;
-        if(param_optimMask_[1]>0) ypos_.v[1] = 0;
-        if(param_optimMask_[2]>0) A_.v[2] = 0;
-        if(param_optimMask_[3]>0) BG_.v[3] = 0;
-        if(param_optimMask_[4]>0) q_1_.v[4] = 0;
-		if(param_optimMask_[5]>0) q_2_.v[5] = 0;
+        if(param_optimMask_[0]) xpos_.v[0] = 0;
+        if(param_optimMask_[1]) ypos_.v[1] = 0;
+        if(param_optimMask_[2]) A_.v[2] = 0;
+        if(param_optimMask_[3]) BG_.v[3] = 0;
+        if(param_optimMask_[4]) q_1_.v[4] = 0;
+		if(param_optimMask_[5]) q_2_.v[5] = 0;
     }
     
     virtual bool Evaluate(const double* parameters,
@@ -384,12 +387,12 @@ public:
         
         { // grab values from parameter vector
             int cnt = 0;
-            if(param_optimMask_[0]>0){ xpos_.a  = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[1]>0){ ypos_.a  = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[2]>0){ A_.a     = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[3]>0){ BG_.a    = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[4]>0){ q_1_.a = parameters[cnt];};
-			if(param_optimMask_[5]>0){ q_2_.a = parameters[cnt];};
+            if(param_optimMask_[0]){ xpos_.a  = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[1]){ ypos_.a  = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[2]){ A_.a     = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[3]){ BG_.a    = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[4]){ q_1_.a = parameters[cnt];};
+			if(param_optimMask_[5]){ q_2_.a = parameters[cnt];};
         }
 
         if(gradient == NULL) // if only function value is requested
@@ -403,12 +406,12 @@ public:
             
             // Assign derivatives to result
             int cnt = 0;
-            if(param_optimMask_[0]>0){ gradient[cnt] = J_result.v[0]; ++cnt;};
-            if(param_optimMask_[1]>0){ gradient[cnt] = J_result.v[1]; ++cnt;};
-            if(param_optimMask_[2]>0){ gradient[cnt] = J_result.v[2]; ++cnt;};
-            if(param_optimMask_[3]>0){ gradient[cnt] = J_result.v[3]; ++cnt;};
-            if(param_optimMask_[4]>0){ gradient[cnt] = J_result.v[4]; ++cnt;};
-			if(param_optimMask_[5]>0){ gradient[cnt] = J_result.v[5]; ++cnt;};
+            if(param_optimMask_[0]){ gradient[cnt] = J_result.v[0]; ++cnt;};
+            if(param_optimMask_[1]){ gradient[cnt] = J_result.v[1]; ++cnt;};
+            if(param_optimMask_[2]){ gradient[cnt] = J_result.v[2]; ++cnt;};
+            if(param_optimMask_[3]){ gradient[cnt] = J_result.v[3]; ++cnt;};
+            if(param_optimMask_[4]){ gradient[cnt] = J_result.v[4]; ++cnt;};
+			if(param_optimMask_[5]){ gradient[cnt] = J_result.v[5]; ++cnt;};
         };
         
         return true;
@@ -449,7 +452,7 @@ private:
     const std::vector<int>& x_; // x coordinates
     const std::vector<int>& y_; // y coordinates
     
-    const std::vector<int>& param_optimMask_; // mask which parameters are optimized
+    const std::vector<bool>& param_optimMask_; // mask which parameters are optimized
     int nr_optim_params_;
     
     // To keep different parameters constant, we copy all initial values.
@@ -462,20 +465,20 @@ private:
 class SampledGaussAnisoAngle_MLE_Cost : public ceres::FirstOrderFunction {
     
 public:
-    SampledGaussAnisoAngle_MLE_Cost(Array2D& I, std::vector<int>& x, std::vector<int>& y, std::vector<int>& param_optimMask, double xpos_init, double ypos_init, double A_init, double BG_init, double q_1_init, double q_2_init, double q_3_init )
+    SampledGaussAnisoAngle_MLE_Cost(Array2D& I, std::vector<int>& x, std::vector<int>& y, std::vector<bool>& param_optimMask, double xpos_init, double ypos_init, double A_init, double BG_init, double q_1_init, double q_2_init, double q_3_init )
     : I_(I), x_(x), y_(y), param_optimMask_(param_optimMask), nr_optim_params_(0), xpos_(xpos_init, 0), ypos_(ypos_init, 1), A_(A_init, 2), BG_(BG_init, 3), q_1_(q_1_init, 4), q_2_(q_2_init, 5), q_3_(q_3_init, 6)
     {
         for(int i =0; i<param_optimMask_.size(); ++i)
-            nr_optim_params_ += (param_optimMask_[i]>0);
+            nr_optim_params_ += (param_optimMask_[i]);
         
         // Set infinitesimals of constant parameters to zero
-        if(param_optimMask_[0]>0) xpos_.v[0] = 0;
-        if(param_optimMask_[1]>0) ypos_.v[1] = 0;
-        if(param_optimMask_[2]>0) A_.v[2] = 0;
-        if(param_optimMask_[3]>0) BG_.v[3] = 0;
-        if(param_optimMask_[4]>0) q_1_.v[4] = 0;
-		if(param_optimMask_[5]>0) q_2_.v[5] = 0;
-		if(param_optimMask_[6]>0) q_3_.v[6] = 0;
+        if(param_optimMask_[0]) xpos_.v[0] = 0;
+        if(param_optimMask_[1]) ypos_.v[1] = 0;
+        if(param_optimMask_[2]) A_.v[2] = 0;
+        if(param_optimMask_[3]) BG_.v[3] = 0;
+        if(param_optimMask_[4]) q_1_.v[4] = 0;
+		if(param_optimMask_[5]) q_2_.v[5] = 0;
+		if(param_optimMask_[6]) q_3_.v[6] = 0;
     }
     
     virtual bool Evaluate(const double* parameters,
@@ -484,13 +487,13 @@ public:
         
         { // grab values from parameter vector
             int cnt = 0;
-            if(param_optimMask_[0]>0){ xpos_.a  = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[1]>0){ ypos_.a  = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[2]>0){ A_.a     = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[3]>0){ BG_.a    = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[4]>0){ q_1_.a = parameters[cnt];};
-			if(param_optimMask_[5]>0){ q_2_.a = parameters[cnt];};
-			if(param_optimMask_[6]>0){ q_3_.a = parameters[cnt];};
+            if(param_optimMask_[0]){ xpos_.a  = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[1]){ ypos_.a  = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[2]){ A_.a     = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[3]){ BG_.a    = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[4]){ q_1_.a = parameters[cnt];};
+			if(param_optimMask_[5]){ q_2_.a = parameters[cnt];};
+			if(param_optimMask_[6]){ q_3_.a = parameters[cnt];};
         }
 
         if(gradient == NULL) // if only function value is requested
@@ -504,13 +507,13 @@ public:
             
             // Assign derivatives to result
             int cnt = 0;
-            if(param_optimMask_[0]>0){ gradient[cnt] = J_result.v[0]; ++cnt;};
-            if(param_optimMask_[1]>0){ gradient[cnt] = J_result.v[1]; ++cnt;};
-            if(param_optimMask_[2]>0){ gradient[cnt] = J_result.v[2]; ++cnt;};
-            if(param_optimMask_[3]>0){ gradient[cnt] = J_result.v[3]; ++cnt;};
-            if(param_optimMask_[4]>0){ gradient[cnt] = J_result.v[4]; ++cnt;};
-			if(param_optimMask_[5]>0){ gradient[cnt] = J_result.v[5]; ++cnt;};
-			if(param_optimMask_[6]>0){ gradient[cnt] = J_result.v[6]; ++cnt;};
+            if(param_optimMask_[0]){ gradient[cnt] = J_result.v[0]; ++cnt;};
+            if(param_optimMask_[1]){ gradient[cnt] = J_result.v[1]; ++cnt;};
+            if(param_optimMask_[2]){ gradient[cnt] = J_result.v[2]; ++cnt;};
+            if(param_optimMask_[3]){ gradient[cnt] = J_result.v[3]; ++cnt;};
+            if(param_optimMask_[4]){ gradient[cnt] = J_result.v[4]; ++cnt;};
+			if(param_optimMask_[5]){ gradient[cnt] = J_result.v[5]; ++cnt;};
+			if(param_optimMask_[6]){ gradient[cnt] = J_result.v[6]; ++cnt;};
         };
         
         return true;
@@ -551,7 +554,7 @@ private:
     const std::vector<int>& x_; // x coordinates
     const std::vector<int>& y_; // y coordinates
     
-    const std::vector<int>& param_optimMask_; // mask which parameters are optimized
+    const std::vector<bool>& param_optimMask_; // mask which parameters are optimized
     int nr_optim_params_;
     
     // To keep different parameters constant, we copy all initial values.
@@ -564,18 +567,18 @@ private:
 class IntegratedGauss_MLE_Cost : public ceres::FirstOrderFunction {
     
 public:
-    IntegratedGauss_MLE_Cost(Array2D& I, std::vector<int>& x, std::vector<int>& y, std::vector<int>& param_optimMask, double xpos_init, double ypos_init, double A_init, double BG_init, double q_1_init )
+    IntegratedGauss_MLE_Cost(Array2D& I, std::vector<int>& x, std::vector<int>& y, std::vector<bool>& param_optimMask, double xpos_init, double ypos_init, double A_init, double BG_init, double q_1_init )
     : I_(I), x_(x), y_(y), param_optimMask_(param_optimMask), nr_optim_params_(0), xpos_(xpos_init, 0), ypos_(ypos_init, 1), A_(A_init, 2), BG_(BG_init, 3), q_1_(q_1_init, 4)
     {
         for(int i =0; i<param_optimMask_.size(); ++i)
-            nr_optim_params_ += (param_optimMask_[i]>0);
+            nr_optim_params_ += (param_optimMask_[i]);
         
         // Set infinitesimals of constant parameters to zero
-        if(param_optimMask_[0]>0) xpos_.v[0] = 0;
-        if(param_optimMask_[1]>0) ypos_.v[1] = 0;
-        if(param_optimMask_[2]>0) A_.v[2] = 0;
-        if(param_optimMask_[3]>0) BG_.v[3] = 0;
-        if(param_optimMask_[4]>0) q_1_.v[4] = 0;
+        if(param_optimMask_[0]) xpos_.v[0] = 0;
+        if(param_optimMask_[1]) ypos_.v[1] = 0;
+        if(param_optimMask_[2]) A_.v[2] = 0;
+        if(param_optimMask_[3]) BG_.v[3] = 0;
+        if(param_optimMask_[4]) q_1_.v[4] = 0;
     }
     
     virtual bool Evaluate(const double* parameters,
@@ -584,11 +587,11 @@ public:
         
         { // grab values from parameter vector
             int cnt = 0;
-            if(param_optimMask_[0]>0){ xpos_.a  = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[1]>0){ ypos_.a  = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[2]>0){ A_.a     = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[3]>0){ BG_.a    = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[4]>0){ q_1_.a = parameters[cnt];};
+            if(param_optimMask_[0]){ xpos_.a  = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[1]){ ypos_.a  = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[2]){ A_.a     = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[3]){ BG_.a    = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[4]){ q_1_.a = parameters[cnt];};
         }
 
         if(gradient == NULL) // if only function value is requested
@@ -602,11 +605,11 @@ public:
             
             // Assign derivatives to result
             int cnt = 0;
-            if(param_optimMask_[0]>0){ gradient[cnt] = J_result.v[0]; ++cnt;};
-            if(param_optimMask_[1]>0){ gradient[cnt] = J_result.v[1]; ++cnt;};
-            if(param_optimMask_[2]>0){ gradient[cnt] = J_result.v[2]; ++cnt;};
-            if(param_optimMask_[3]>0){ gradient[cnt] = J_result.v[3]; ++cnt;};
-            if(param_optimMask_[4]>0){ gradient[cnt] = J_result.v[4]; ++cnt;};
+            if(param_optimMask_[0]){ gradient[cnt] = J_result.v[0]; ++cnt;};
+            if(param_optimMask_[1]){ gradient[cnt] = J_result.v[1]; ++cnt;};
+            if(param_optimMask_[2]){ gradient[cnt] = J_result.v[2]; ++cnt;};
+            if(param_optimMask_[3]){ gradient[cnt] = J_result.v[3]; ++cnt;};
+            if(param_optimMask_[4]){ gradient[cnt] = J_result.v[4]; ++cnt;};
         };
         return true;
     }
@@ -647,7 +650,7 @@ private:
     const std::vector<int>& x_; // x coordinates
     const std::vector<int>& y_; // y coordinates
     
-    const std::vector<int>& param_optimMask_; // mask which parameters are optimized
+    const std::vector<bool>& param_optimMask_; // mask which parameters are optimized
     int nr_optim_params_;
     
     // To keep different parameters constant, we copy all initial values.
@@ -660,19 +663,19 @@ private:
 class IntegratedGaussAniso_MLE_Cost : public ceres::FirstOrderFunction {
     
 public:
-    IntegratedGaussAniso_MLE_Cost(Array2D& I, std::vector<int>& x, std::vector<int>& y, std::vector<int>& param_optimMask, double xpos_init, double ypos_init, double A_init, double BG_init, double q_1_init, double q_2_init )
+    IntegratedGaussAniso_MLE_Cost(Array2D& I, std::vector<int>& x, std::vector<int>& y, std::vector<bool>& param_optimMask, double xpos_init, double ypos_init, double A_init, double BG_init, double q_1_init, double q_2_init )
     : I_(I), x_(x), y_(y), param_optimMask_(param_optimMask), nr_optim_params_(0), xpos_(xpos_init, 0), ypos_(ypos_init, 1), A_(A_init, 2), BG_(BG_init, 3), q_1_(q_1_init, 4), q_2_(q_2_init,5)
     {
         for(int i =0; i<param_optimMask_.size(); ++i)
-            nr_optim_params_ += (param_optimMask_[i]>0);
+            nr_optim_params_ += (param_optimMask_[i]);
         
         // Set infinitesimals of constant parameters to zero
-        if(param_optimMask_[0]>0) xpos_.v[0] = 0;
-        if(param_optimMask_[1]>0) ypos_.v[1] = 0;
-        if(param_optimMask_[2]>0) A_.v[2] = 0;
-        if(param_optimMask_[3]>0) BG_.v[3] = 0;
-        if(param_optimMask_[4]>0) q_1_.v[4] = 0;
-		if(param_optimMask_[5]>0) q_2_.v[5] = 0;
+        if(param_optimMask_[0]) xpos_.v[0] = 0;
+        if(param_optimMask_[1]) ypos_.v[1] = 0;
+        if(param_optimMask_[2]) A_.v[2] = 0;
+        if(param_optimMask_[3]) BG_.v[3] = 0;
+        if(param_optimMask_[4]) q_1_.v[4] = 0;
+		if(param_optimMask_[5]) q_2_.v[5] = 0;
     }
     
     virtual bool Evaluate(const double* parameters,
@@ -681,12 +684,12 @@ public:
         
         { // grab values from parameter vector
             int cnt = 0;
-            if(param_optimMask_[0]>0){ xpos_.a  = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[1]>0){ ypos_.a  = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[2]>0){ A_.a     = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[3]>0){ BG_.a    = parameters[cnt]; ++cnt;};
-            if(param_optimMask_[4]>0){ q_1_.a = parameters[cnt];};
-			if(param_optimMask_[5]>0){ q_2_.a = parameters[cnt];};
+            if(param_optimMask_[0]){ xpos_.a  = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[1]){ ypos_.a  = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[2]){ A_.a     = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[3]){ BG_.a    = parameters[cnt]; ++cnt;};
+            if(param_optimMask_[4]){ q_1_.a = parameters[cnt];};
+			if(param_optimMask_[5]){ q_2_.a = parameters[cnt];};
         }
 
         if(gradient == NULL) // if only function value is requested
@@ -700,12 +703,12 @@ public:
             
             // Assign derivatives to result
             int cnt = 0;
-            if(param_optimMask_[0]>0){ gradient[cnt] = J_result.v[0]; ++cnt;};
-            if(param_optimMask_[1]>0){ gradient[cnt] = J_result.v[1]; ++cnt;};
-            if(param_optimMask_[2]>0){ gradient[cnt] = J_result.v[2]; ++cnt;};
-            if(param_optimMask_[3]>0){ gradient[cnt] = J_result.v[3]; ++cnt;};
-            if(param_optimMask_[4]>0){ gradient[cnt] = J_result.v[4]; ++cnt;};
-			if(param_optimMask_[5]>0){ gradient[cnt] = J_result.v[5]; ++cnt;};
+            if(param_optimMask_[0]){ gradient[cnt] = J_result.v[0]; ++cnt;};
+            if(param_optimMask_[1]){ gradient[cnt] = J_result.v[1]; ++cnt;};
+            if(param_optimMask_[2]){ gradient[cnt] = J_result.v[2]; ++cnt;};
+            if(param_optimMask_[3]){ gradient[cnt] = J_result.v[3]; ++cnt;};
+            if(param_optimMask_[4]){ gradient[cnt] = J_result.v[4]; ++cnt;};
+			if(param_optimMask_[5]){ gradient[cnt] = J_result.v[5]; ++cnt;};
         };
         return true;
     }
@@ -746,7 +749,7 @@ private:
     const std::vector<int>& x_; // x coordinates
     const std::vector<int>& y_; // y coordinates
     
-    const std::vector<int>& param_optimMask_; // mask which parameters are optimized
+    const std::vector<bool>& param_optimMask_; // mask which parameters are optimized
     int nr_optim_params_;
     
     // To keep different parameters constant, we copy all initial values.

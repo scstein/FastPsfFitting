@@ -63,6 +63,28 @@ protected:
   }
 }; 
 
+//  -- Used to ignore std::cout --
+// We need this for linux, as std::cout automatically redirects to the MATLAB console in linux
+// To overload cout use:
+//    nullStream nullStr;
+//    std::streambuf *outbuf = std::cout.rdbuf(&nullStr);  // Replace the std stream with the 'matlab' stream
+//      -- your code --
+//    std::cout.rdbuf(outbuf);   // Restore the std stream buffer (important!)
+class nullStream : public std::streambuf {
+public:
+protected:
+  virtual std::streamsize xsputn(const char *s, std::streamsize n)
+  {
+    // Do nothing
+    return n;
+  }
+  virtual int overflow(int c = EOF)
+  {
+    // Do nothing
+    return 1;   
+  }
+}; 
+
     
 template <typename Type>
 void checkDatatypeCompatability(const mxArray* mexPtr)
@@ -391,7 +413,7 @@ struct Array3D_t
        nCols( other.nCols ),
        nDepth( other.num_depth ),
        nElements(other.nElements),
-       nRowsXnCols( other.nRowsXnCols )
+       nRowsXnCols( other.nRowsXnCols ),
        standalone( other.standalone )
     {
            // Take deep copy of the other array
@@ -423,7 +445,7 @@ struct Array3D_t
     
     bool isEmpty() const
     {
-      return nElements==0;   
+      return nElements==0;
     }
     
     // Attributes

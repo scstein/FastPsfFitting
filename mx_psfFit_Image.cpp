@@ -44,7 +44,6 @@
 
 // stdlib
 #include <cmath>
-#include <math.h>
 #include <iostream>
 #include <algorithm>
 
@@ -86,7 +85,7 @@ int round_positive(double x)
 // %                initial conditions for P parameters. At least position [xpos; ypos] 
 // %                must be specified (P>=2). You can specify up to [xpos;ypos;A;BG;q_1;q_2;q_3]. 
 // %                If negative values are given, the fitter estimates a value for that parameter.
-// %   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,q_1,q_2,q_3]. 
+// %   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma_x,sigma_y,angle]. 
 // %                Parameters with value 'false' are not fitted. | default: ones(7,1) -> 'optimize all'
 // %   useIntegratedGauss - Wether to use pixel integrated gaussian or not | default: 'false'
 // %   useMLErefine - Use Poissonian noise based maximum likelihood estimation after
@@ -99,7 +98,14 @@ int round_positive(double x)
 // %
 // % Output
 // %   params     -  Fitted parameters 6xN. Columns are in order
-// %                 [xpos; ypos; A; BG; q_1; q_2; q_3; exitflag].
+// %                 [xpos;
+//                    ypos;
+//                    A;
+//                    BG;
+//                    q_1 (related to sigma_x);
+//                    q_2 (related to sigma_y);
+//                    q_3 (related to angle);
+//                    exitflag].
 // %             
 // %           The last row 'exitflag' returns the state of optimizer. 
 // %           Positive = 'good'. Negative = 'bad'.
@@ -107,7 +113,7 @@ int round_positive(double x)
 // %            -1 - NO_CONVERGENCE
 // %            -2 - FAILURE
 // %
-// % Author: Simon Christoph Stein
+// % Author: Simon Christoph Stein, extended by Jan Thiart
 // % Date:   June 2015
 // % E-Mail: scstein@phys.uni-goettingen.de
 void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
@@ -138,7 +144,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     
     int nr_candidates = param_init.nCols;
     int nr_given_params = param_init.nRows;
-    std::vector<int> param_optimMask(7, 1); // default all 1's: optimize every parameter
+    std::vector<bool> param_optimMask(7, 1); // default all 1's: optimize every parameter
     bool usePixelIntegratedGauss = false;
     bool useMLErefine = false;
     
@@ -154,11 +160,12 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
        if( !p_optimMask.isEmpty() ) 
        {
          if(p_optimMask.nElements != 7)
-             mexErrMsgTxt("Specify for every parameter if it should be optimized. [xpos,ypos,A,BG,q_1,q_2,q_3].\n Use 0 to not optimize a parameter.");
+             mexErrMsgTxt("Specify for every parameter if it should be optimized. [xpos,ypos,A,BG,q_1,q_2,q_3].\n Use false to not optimize a parameter.");
          else
          {
+            bool* logical = mxGetLogicals(prhs[2]);
             for(int iParam=0; iParam<7; ++iParam)
-                param_optimMask[iParam] = (int)(p_optimMask[iParam]);
+                param_optimMask[iParam] = logical[iParam];            
          }        
        }       
     }    
@@ -168,7 +175,6 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
        Array1D usePixelIntegration( prhs[3] );
        if( !usePixelIntegration.isEmpty() )
        {
-//            usePixelIntegratedGauss = usePixelIntegration[0];
            usePixelIntegratedGauss = mxIsLogicalScalarTrue(prhs[3]);
        }
     }

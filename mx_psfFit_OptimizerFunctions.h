@@ -43,7 +43,7 @@
 // stdlib
 #include <cmath>
 #include <vector>
-#include <math.h>
+#include <algorithm>
 
 // our headers
 #include "mexUtil.h"
@@ -78,13 +78,13 @@ using ceres::GradientProblemSolver;
  *   results - 8 element vector of fitted parameters [xpos,ypos,A,BG,q_1,q_2,q_3, exitflag]. Exitflag contains the exit state of the solver, which is positive for success and negative for failure. (for more detail see getTerminationType)
 */   
 std::vector<double> 
-fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::vector<double>& param_init, std::vector<int>& param_optimMask, bool usePixelIntegratedGauss, bool useMLErefine = false);
+fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::vector<double>& param_init, std::vector<bool>& param_optimMask, bool usePixelIntegratedGauss, bool useMLErefine = false);
 
 // Estimate the intital conditions for the fit.
 // Estimates are only computed for input parameters with negative values (e.g. givins xpos=-1) to the function.
 // If positive values are given, these are left untouched and taken as the initial guess.
 void
-estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3,std::vector<int>& param_optimMask);
+estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3,std::vector<bool>& param_optimMask);
 
 // Set lower and upper bounds of parameters for the optimization
 void
@@ -105,7 +105,7 @@ getTerminationType(GradientProblemSolver::Summary& summary);
 
 /// --  Functions -- ///
 std::vector<double> 
-fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::vector<double>& param_init, std::vector<int>& param_optimMask, bool usePixelIntegratedGauss, bool useMLErefine)
+fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::vector<double>& param_init, std::vector<bool>& param_optimMask, bool usePixelIntegratedGauss, bool useMLErefine)
 {   
     // The variables to solve for: x,y,A,BG,sigma
     double xpos, ypos, A, BG, q_1, q_2, q_3;
@@ -130,7 +130,7 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
     Problem problem;
     
     CostFunction* cost_function;
-		if(param_optimMask[6]==1)
+		if(param_optimMask[6])
 		{
 			if(usePixelIntegratedGauss)
 				cost_function = new AutoDiffCostFunction<SampledGaussAnisoAngleResidual, ceres::DYNAMIC, 1,1,1,1,1,1,1>(  new SampledGaussAnisoAngleResidual(img, xCoords, yCoords), img.nElements);
@@ -147,7 +147,7 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 		}
 		else
 		{
-			if(param_optimMask[5]==1)
+			if(param_optimMask[5])
 			{
 				if(usePixelIntegratedGauss)
 					cost_function = new AutoDiffCostFunction<IntegratedGaussAnisoResidual, ceres::DYNAMIC, 1,1,1,1,1,1>(  new IntegratedGaussAnisoResidual(img, xCoords, yCoords), img.nElements);
@@ -156,8 +156,8 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 
 				problem.AddResidualBlock(cost_function, NULL, &xpos, &ypos, &A, &BG, &q_1, &q_2);
 				/* fitting an isotropic gaussian while leaving sigma_x,sigma_y constant makes no sense
-				if( param_optimMask[4] == 0 )  problem.SetParameterBlockConstant(&q_1);
-				if( param_optimMask[5] == 0 )  problem.SetParameterBlockConstant(&q_2); */
+				if( !param_optimMask[4])  problem.SetParameterBlockConstant(&q_1);
+				if( !param_optimMask[5])  problem.SetParameterBlockConstant(&q_2); */
 			}
 			else
 			{
@@ -167,15 +167,15 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 					cost_function = new AutoDiffCostFunction<SampledGaussResidual, ceres::DYNAMIC, 1,1,1,1,1>(  new SampledGaussResidual(img, xCoords, yCoords), img.nElements);
 
 				problem.AddResidualBlock(cost_function, NULL, &xpos, &ypos, &A, &BG, &q_1);
-				if( param_optimMask[4] == 0 )  problem.SetParameterBlockConstant(&q_1); //only when dealing with an isotropic Gaussian can we decide if sigma should be fitted or not
+				if( !param_optimMask[4])  problem.SetParameterBlockConstant(&q_1); //only when dealing with an isotropic Gaussian can we decide if sigma should be fitted or not
 			}
 		}
     
      // Keep specified parameters fixed
-    if( param_optimMask[0] == 0 )  problem.SetParameterBlockConstant(&xpos);
-    if( param_optimMask[1] == 0 )  problem.SetParameterBlockConstant(&ypos);        
-    if( param_optimMask[2] == 0 )  problem.SetParameterBlockConstant(&A);
-    if( param_optimMask[3] == 0 )  problem.SetParameterBlockConstant(&BG);
+    if( !param_optimMask[0] )  problem.SetParameterBlockConstant(&xpos);
+    if( !param_optimMask[1] )  problem.SetParameterBlockConstant(&ypos);        
+    if( !param_optimMask[2] )  problem.SetParameterBlockConstant(&A);
+    if( !param_optimMask[3] )  problem.SetParameterBlockConstant(&BG);
  
     
     // Set bounds of parameters///
@@ -209,24 +209,24 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
       {
           int nr_optim_params = 0;
           for(int i =0; i<param_optimMask.size(); ++i)
-              nr_optim_params += (param_optimMask[i]>0);
+              nr_optim_params += param_optimMask[i];
           
           // As some parameters might be specified as fixed, we need to build 
           // the parameter vector only using the ones that should be optimized
           double* parameters = new double[nr_optim_params];
           int cnt = 0;
-          if(param_optimMask[0] > 0) {parameters[cnt] = xpos; ++cnt;}
-          if(param_optimMask[1] > 0) {parameters[cnt] = ypos; ++cnt;}
-          if(param_optimMask[2] > 0) {parameters[cnt] = A; ++cnt;}
-          if(param_optimMask[3] > 0) {parameters[cnt] = BG; ++cnt;}
-          if(param_optimMask[4] > 0) {parameters[cnt] = q_1; ++cnt;}
-		  if(param_optimMask[5] > 0) {parameters[cnt] = q_2; ++cnt;}
-		  if(param_optimMask[6] > 0) {parameters[cnt] = q_3; ++cnt;}
+          if(param_optimMask[0]) {parameters[cnt] = xpos; ++cnt;}
+          if(param_optimMask[1]) {parameters[cnt] = ypos; ++cnt;}
+          if(param_optimMask[2]) {parameters[cnt] = A; ++cnt;}
+          if(param_optimMask[3]) {parameters[cnt] = BG; ++cnt;}
+          if(param_optimMask[4]) {parameters[cnt] = q_1; ++cnt;}
+		  if(param_optimMask[5]) {parameters[cnt] = q_2; ++cnt;}
+		  if(param_optimMask[6]) {parameters[cnt] = q_3; ++cnt;}
           
           // Build the problem
           ceres::FirstOrderFunction* MLE_cost_function;
 
-		  if(param_optimMask[6]==1)
+		  if(param_optimMask[6])
 		  {
 			  if(usePixelIntegratedGauss)
 				  MLE_cost_function = new SampledGaussAnisoAngle_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, q_1, q_2, q_3);
@@ -237,7 +237,7 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 		  }
 		  else
 		  {
-			  if(param_optimMask[5]==1)
+			  if(param_optimMask[5])
 			  {
 				if(usePixelIntegratedGauss)
 				  MLE_cost_function = new IntegratedGaussAniso_MLE_Cost(img, xCoords,yCoords, param_optimMask, xpos, ypos, A, BG, q_1, q_2);
@@ -269,13 +269,13 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
           // Assign the result. 
           // Again: The parameter vector contains only the non-fixed parameters.
           cnt = 0;
-          if(param_optimMask[0] > 0) {xpos  = parameters[cnt]; ++cnt;}
-          if(param_optimMask[1] > 0) {ypos  = parameters[cnt]; ++cnt;}
-          if(param_optimMask[2] > 0) {A     = parameters[cnt]; ++cnt;}
-          if(param_optimMask[3] > 0) {BG    = parameters[cnt]; ++cnt;}
-          if(param_optimMask[4] > 0) {q_1 = parameters[cnt]; ++cnt;}
-		  if(param_optimMask[5] > 0) {q_2 = parameters[cnt]; ++cnt;}
-		  if(param_optimMask[6] > 0) {q_3 = parameters[cnt]; ++cnt;}
+          if(param_optimMask[0]) {xpos  = parameters[cnt]; ++cnt;}
+          if(param_optimMask[1]) {ypos  = parameters[cnt]; ++cnt;}
+          if(param_optimMask[2]) {A     = parameters[cnt]; ++cnt;}
+          if(param_optimMask[3]) {BG    = parameters[cnt]; ++cnt;}
+          if(param_optimMask[4]) {q_1 = parameters[cnt]; ++cnt;}
+		  if(param_optimMask[5]) {q_2 = parameters[cnt]; ++cnt;}
+		  if(param_optimMask[6]) {q_3 = parameters[cnt]; ++cnt;}
           
           // If one of the solvers returned convergence without the other one reporting failure,
           // we take the optimization as succeeded. (Sometimes the MLE will return NO_CONVERGENCE
@@ -310,7 +310,7 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 
 
 
-void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3, std::vector<int>& param_optimMask)
+void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3, std::vector<bool>& param_optimMask)
 {
 
 	// Background guess
@@ -344,7 +344,7 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
 
 	// If fitting a non-isotropic rotated Gaussian, initial parameters will be guessed by SVD
 	double m_00 = 0, m_10 = 0, m_01 = 0, m_11 = 0, m_20 = 0, m_02 = 0, img_tmp = 0, tau = 0, delta = 0, angle = 0, q_tmp, sigma_part = 0;
-	if(param_optimMask[6]==1)
+	if(param_optimMask[6])
 	{
 		// calculate intensity moments
 		for(unsigned int iCol = 0; iCol<img.nCols; ++iCol)
@@ -410,7 +410,7 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
 
 
 	}
-	else if(param_optimMask[5]==1 && param_optimMask[6]==0)
+	else if(param_optimMask[5])
 	{
 		q_3 = 0;
 		if (q_1< 0 || q_2 < 0)
@@ -491,7 +491,7 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
     // Amplitude guess
     if (A<0)
         A = img_max-BG;
-     
+        
 }
 
 void setParameterBounds(Problem& problem, Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3)

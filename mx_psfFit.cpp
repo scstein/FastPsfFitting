@@ -76,15 +76,23 @@ using namespace std;
 // %   param_init - Initial values [xpos,ypos,A,BG,sigma]. If negative values
 // %                are given, the fitter estimates a value for that
 // %                parameter. | default: -1*ones(5,1) -> 'estimate all'
-// %   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma]. 
-// %                Parameters with value 'false' are not fitted. | default: ones(5,1) -> 'optimize all'
+// %   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma_x,sigma_y,angle]. 
+// %                Parameters with value 'false' are not fitted. | default: ones(7,1) -> 'optimize all'
 // %   useIntegratedGauss - Wether to use pixel integrated gaussian or not | default: false
 // %   useMLErefine - Use Poissonian noise based maximum likelihood estimation after
 // %                  least squares fit. Make sure to input image intensities in photons 
 // %                  for this to make sense. | default: false
 // %
 // % Output
-// %   params - Final parameters [xpos,ypos,A,BG,sigma].
+// %   params - Final parameters 
+// %                 [xpos;
+//                    ypos;
+//                    A;
+//                    BG;
+//                    q_1 (related to sigma_x);
+//                    q_2 (related to sigma_y);
+//                    q_3 (related to angle)];
+//
 // %   exitflag - Return state of optimizer. Positive = 'good'. Negative = 'bad'.
 // %         1 - CONVERGENCE
 // %        -1 - NO_CONVERGENCE
@@ -117,7 +125,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     /* Map access to input data */
     Array2D img( prhs[0] );
     std::vector<double> param_init(5, -1); // -1 default: estimate value of each parameter
-    std::vector<int> param_optimMask(5, 1); // 1 default: optimize every parameter
+    std::vector<bool> param_optimMask(7, 1); // 1 default: optimize every parameter
     bool usePixelIntegratedGauss = false;
     bool useMLErefine = false;
     
@@ -126,7 +134,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
        Array1D p_init( prhs[1] );
        if( !p_init.isEmpty() ) 
        {
-           if(p_init.nElements != 5)
+           if(p_init.nElements != 7)
                mexErrMsgTxt("Specify initial condition for every parameter. [xpos,ypos,A,BG,sigma].\n Use negative values for parameters you don't want to specify!");
            else
            {
@@ -141,12 +149,13 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
        Array1D p_optimMask( prhs[2] );
        if( !p_optimMask.isEmpty() ) 
        {
-         if(p_optimMask.nElements != 5)
-             mexErrMsgTxt("Specify for every parameter if it should be optimized. [xpos,ypos,A,BG,sigma].\n Use 0 to not optimize a parameter.");
+         if(p_optimMask.nElements != 7)
+             mexErrMsgTxt("Specify for every parameter if it should be optimized. [xpos,ypos,A,BG,sigma].\n Use false to not optimize a parameter.");
          else
          {
-            for(int iParam=0; iParam<5; ++iParam)
-                param_optimMask[iParam] = p_optimMask[iParam];
+            bool* logical = mxGetLogicals(prhs[2]);
+            for(int iParam=0; iParam<7; ++iParam)
+                param_optimMask[iParam] = logical[iParam];
          }        
        }       
     }    
@@ -157,7 +166,6 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
        if( !usePixelIntegration.isEmpty() )
        {
            usePixelIntegratedGauss = mxIsLogicalScalarTrue(prhs[3]);
-           // usePixelIntegratedGauss = usePixelIntegration[0];
        }
     }
     
@@ -166,7 +174,6 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
        Array1D useMLE( prhs[4] );
        if( !useMLE.isEmpty() )
        {
-           //  useMLErefine = useMLE[0];
            useMLErefine = mxIsLogicalScalarTrue(prhs[4]);
        }
     }
@@ -186,7 +193,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     
         ///  --  Output to MATLAB -- //
     const int nDims = 1; // Number of dimensions for output
-    mwSize dim_out0[nDims] = { 5 };
+    mwSize dim_out0[nDims] = { 7 };
     plhs[0] = mxCreateNumericArray( nDims, dim_out0 , mxDOUBLE_CLASS, mxREAL);
     
     // fitted parameter values
@@ -195,13 +202,15 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     fin_params[1] = results[1]; // y
     fin_params[2] = results[2]; // A
     fin_params[3] = results[3]; // BG
-    fin_params[4] = results[4]; // sigma
+    fin_params[4] = results[4]; // q1 (related to sigma_x)        
+    fin_params[5] = results[5]; // q2 (related to sigma_y)
+    fin_params[6] = results[6]; // q3 (related to angle)
     
     // exit state of optimizer
     mwSize dim_out1[1] = { 1 };
     plhs[1] = mxCreateNumericArray( 1, dim_out1 , mxDOUBLE_CLASS, mxREAL);
     double& exitflag  = *mxGetPr(plhs[1]);
-    exitflag = results[5]; // exitflag
+    exitflag = results[7]; // exitflag
     
     // Restore the std stream buffer
     std::cout.rdbuf(outbuf);
