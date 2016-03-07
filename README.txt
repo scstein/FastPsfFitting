@@ -21,16 +21,16 @@ Make sure all files are in the directory of the Matlab functions before calling 
 
 (x) Go to the FastPsfFitting directory
    For compiling ceres we use Tal Ben-Nun's github repository for windows (we use it for linux as well)
-   Execute "git submodule init" and "git submodule update" to download it automatically
+   Execute "git submodule update --init --recursive" to download it automatically
 (x) Download the eigen library from
      URL: http://eigen.tuxfamily.org/ 
    and put it in "ceres-windows/eigen"
 
-Windows:
+Windows (build tested with Windows 7, Visual Studio Professional 2012):
 To build ceres with Visual Studio simply open the project files in ceres-windows and 
 start the compilation of project "ceres" in "Release" "x64" mode.
 
-Linux (tested with Kubuntu):
+Linux (build tested with Kubuntu 14.4):
 With Linux ceres can be compiled with CMake as follows:
 - Execute linux_install_forCeresBuild.sh to install neccessary libraries
 - Switch to the "ceres-windows/ceres-solver/" directory
@@ -38,6 +38,7 @@ With Linux ceres can be compiled with CMake as follows:
 - Execute "cmake-gui ..", press "Configure" once, set "BUILD_SHARED_LIBS" to true, press "Generate"
 - Close cmake-gui and execute "make -j4"
 To build ceres with Visual Studio simply open the project files in ceres-windows and start the compilation of project "ceres" in Release mode.
+
 
 Given a working MEX setup with Visual Studio, the FastPsfFitting functions can be compiled from MATLAB using the provided build_xxx.m-scripts.
 
