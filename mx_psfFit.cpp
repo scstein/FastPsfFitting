@@ -1,13 +1,13 @@
 
-// Author: Simon Christoph Stein
+// Authors: Simon Christoph Stein and Jan Thiart
 // E-Mail: scstein@phys.uni-goettingen.de
-// Date: June 2015
+// Date: March 2016
 
 // Optimization is done using the ceres-solver library.
 // http://ceres-solver.org, New BSD license.
 // Copyright 2015 Google Inc. All rights reserved.
 
-// % Copyright (c) 2015, Simon Christoph Stein
+// % Copyright (c) 2016, Simon Christoph Stein
 // % All rights reserved.
 // % 
 // % Redistribution and use in source and binary forms, with or without
@@ -34,12 +34,6 @@
 // % of the authors and should not be interpreted as representing official policies,
 // % either expressed or implied, of the FreeBSD Project.
 
-
-// Use OpenMP if available to parallelize computation
-#ifdef _OPENMP
-    #include <omp.h>
-#endif
-
 // mex
 #include "mex.h"
 
@@ -59,8 +53,7 @@ typedef Array3D_t<double> Array3D;
 
 using namespace std;
 
-// --   psfFit  --
-// % Short usage: params = psfFit( img );
+// % Short usage: params = psfFit( img );  (fits an isotropic gaussian)
 // % Full usage: [ params, exitflag ] = psfFit( img, param_init, param_optimizeMask, useIntegratedGauss, useMLErefine)
 // %  Fit a gaussian point spread function model to the given image.
 // % 
@@ -71,35 +64,38 @@ using namespace std;
 // %
 // % Use empty matrix [] for parameters you don't want to specify.
 // %
+// % Gaussian fitting covers three basic cases:
+// %   - fitting isotropic gaussian  (sigma_y and angle initial values not specified and they should not be optimized)
+// %   - fitting anisotropic gaussian  (angle initial value not specified and should not be optimized)
+// %   - fitting anisotropic rotated gaussian
+// %
 // % Input:
-// %   img - NxM image to fit to. 
-// %   param_init - Initial values [xpos,ypos,A,BG,sigma]. If negative values
-// %                are given, the fitter estimates a value for that
-// %                parameter. | default: -1*ones(5,1) -> 'estimate all'
-// %   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma_x,sigma_y,angle]. 
-// %                Parameters with value 'false' are not fitted. | default: ones(7,1) -> 'optimize all'
-// %   useIntegratedGauss - Wether to use pixel integrated gaussian or not | default: false
+// %   img - NxM image to fit to. (internally converted to double)
+// %   param_init - Initial values for parameters. You can specify up to [xpos;ypos;A;BG;sigma_x,sigma_y,angle].
+// %                If negative or no values are given, the fitter estimates a value for that parameter if neccessary, 
+// %                with the exception of the angle, which is estimated if angle==0 and if it should be optimized.
+// %                If parameters are not optimized (see next entry) their values are kept constant during optimization.
+// %   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma_x,sigma_y,angle].
+// %                Parameters with value 'false' are not fitted. | default: [1,1,1,1,1,0,0] -> 'optimize x,y,A,BG,sigma' (isoptric gaussian)
+// %   useIntegratedGauss - Wether to use pixel integrated gaussian or not 
+// %                        not supported for non-isotropic arbitrarily roated gaussians | default: false
 // %   useMLErefine - Use Poissonian noise based maximum likelihood estimation after
 // %                  least squares fit. Make sure to input image intensities in photons 
 // %                  for this to make sense. | default: false
 // %
 // % Output
-// %   params - Final parameters 
-// %                 [xpos;
-//                    ypos;
-//                    A;
-//                    BG;
-//                    q_1 (related to sigma_x);
-//                    q_2 (related to sigma_y);
-//                    q_3 (related to angle)];
-//
+// %   params - Final parameters [xpos,ypos,A,BG,sigma_x,sigma_y,angle].
 // %   exitflag - Return state of optimizer. Positive = 'good'. Negative = 'bad'.
 // %         1 - CONVERGENCE
 // %        -1 - NO_CONVERGENCE
 // %        -2 - FAILURE
 // %
-// % Author: Simon Christoph Stein
-// % Date: June 2015
+// % Optimization is done using the ceres-solver library.
+// % http://ceres-solver.org, New BSD license.
+// % Copyright 2015 Google Inc. All rights reserved.
+// %
+// % Authors: Simon Christoph Stein and Jan Thiart
+// % Date: March 2016
 // % E-Mail: scstein@phys.uni-goettingen.de
 void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 {
@@ -107,14 +103,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     mexStream mout;
     std::streambuf *outbuf = std::cout.rdbuf(&mout);
     
-    #ifdef DEBUG
-        #ifdef _OPENMP
-            printf("OpenMP number of threads: %i\n", omp_get_num_threads()); // Test if openMP is included correctly
-        #endif
-    #endif
-    
-        /// -- Input parsing -- ///      
-    
+        /// -- Input parsing -- ///          
     /* Check for proper number of arguments. */
     if(nrhs<1)
        mexErrMsgTxt("psfFit is hungry! Please feed me at least an image!");
@@ -124,26 +113,13 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
             
     /* Map access to input data */
     Array2D img( prhs[0] );
-    std::vector<double> param_init(5, -1); // -1 default: estimate value of each parameter
-    std::vector<bool> param_optimMask(7, 1); // 1 default: optimize every parameter
+    Array2D param_init( prhs[1] );
+    int nr_given_params = param_init.nElements;
+    
+    std::vector<bool> param_optimMask(7, 1); // default all 1's: optimize every parameter
     bool usePixelIntegratedGauss = false;
     bool useMLErefine = false;
-    
-    if(nrhs>1)
-    {
-       Array1D p_init( prhs[1] );
-       if( !p_init.isEmpty() ) 
-       {
-           if(p_init.nElements != 7)
-               mexErrMsgTxt("Specify initial condition for every parameter. [xpos,ypos,A,BG,sigma].\n Use negative values for parameters you don't want to specify!");
-           else
-           {
-            for(int iParam=0; iParam<5; ++iParam)
-                param_init[iParam] = p_init[iParam];
-           }
-       }
-    }
-    
+       
     if(nrhs>2)
     {
        Array1D p_optimMask( prhs[2] );
@@ -180,6 +156,17 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     
     
         /// -- Here goes the fitting! -- ///
+    
+    // Set intital conditions
+    std::vector<double> p_init(7);
+    p_init[0] = (nr_given_params >= 1) ? param_init[0]:-1;
+    p_init[1] = (nr_given_params >= 2) ? param_init[1]:-1;
+    p_init[2] = (nr_given_params >= 3) ?  param_init[2]:-1;
+    p_init[3] = (nr_given_params >= 4) ?  param_init[3]:-1;
+    p_init[4] = (nr_given_params >= 5) ?  param_init[4]:-1;
+    p_init[5] = (nr_given_params >= 6) ?  param_init[5]:-1;
+    p_init[6] = (nr_given_params >= 7) ?  param_init[6]:0; // angle is special as any value (-infty,infty) can make sense
+    
     // Built coordinate system to use
     std::vector<int> xCoords(img.nCols);
     std::vector<int> yCoords(img.nRows);    
@@ -189,7 +176,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
           yCoords[iRow] = iRow+1; // We use Matlab coordinates
     
     // Fit image, collect results
-    std::vector<double> results = fitPSF(img, xCoords, yCoords, param_init, param_optimMask, usePixelIntegratedGauss, useMLErefine);
+    std::vector<double> results = fitPSF(img, xCoords, yCoords, p_init, param_optimMask, usePixelIntegratedGauss, useMLErefine);
     
         ///  --  Output to MATLAB -- //
     const int nDims = 1; // Number of dimensions for output
@@ -202,9 +189,16 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     fin_params[1] = results[1]; // y
     fin_params[2] = results[2]; // A
     fin_params[3] = results[3]; // BG
-    fin_params[4] = results[4]; // q1 (related to sigma_x)        
-    fin_params[5] = results[5]; // q2 (related to sigma_y)
-    fin_params[6] = results[6]; // q3 (related to angle)
+    // results[4]; // q1 (related to sigma_x)        
+    // results[5]; // q2 (related to sigma_y)
+    // results[6]; // q3 (related to angle)
+
+    double sigma_x, sigma_y, angle;
+    convert_Qs_To_SxSyAngle( results[4], results[5], results[6], sigma_x, sigma_y, angle);
+    fin_params[4] = sigma_x;       
+	fin_params[5] = sigma_y;
+	fin_params[6] = angle;
+    
     
     // exit state of optimizer
     mwSize dim_out1[1] = { 1 };

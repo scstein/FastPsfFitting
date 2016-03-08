@@ -1,7 +1,7 @@
 %images start in top left corner, fitting uses cartesian coordinates -> use
 %im(end:-1:1,:) to get correct correlation with angles!
 
-function [candidatePos,img,img_truth,ground_truth] = createPSFFitTest(optionsSim,optionsFit,plotFits)
+function [candidatePos,img,img_truth,ground_truth] = createPSFFitTest(candidatePos, optionsSim,optionsFit,plotFits)
 
 amp_mean = optionsSim.ampMean;
 amp_sigma = optionsSim.ampSigma;
@@ -17,9 +17,8 @@ useMLE = optionsFit.useMLE;
 halfw = optionsFit.halfw;
 varsToFit = optionsFit.varsToFit;
 
-img = zeros(64,64);
+img = zeros(optionsSim.imWidth,optionsSim.imWidth);
 ground_truth = [];
-load('testrun_positions.mat','candidatePos');
 
 for iPos = 1:size(candidatePos,1); %#ok<NODEF>
     r = -0.5+rand(1,2);
@@ -34,31 +33,32 @@ for iPos = 1:size(candidatePos,1); %#ok<NODEF>
     ground_truth = [ground_truth;[candidatePos(iPos,:)+r,amp,sigma_x,sigma_y,angle]]; %#ok<AGROW>
 end
 img_truth = img;
-img = poissrnd(img+background);
+% img = poissrnd(img+background);
+img = img+background;
 
 
-[params] = psfFit_Image( img, candidatePos.',varsToFit,usePixelIntegratedFit,useMLE,halfw,PSFsigma);
+[params] = psfFit_Image( img, candidatePos.',varsToFit,usePixelIntegratedFit,useMLE,halfw);
 fitData = {params(:,params(end,:)==1).'};
 
-for iPos = 1:size(fitData{1},1)
-    a = fitData{1}(iPos,5); b = fitData{1}(iPos,7); c = fitData{1}(iPos,6);
-    angle_fit = 0.5*atan(2*b/(c-a));
-    if abs(angle_fit)<=pi/4
-        sigma_x_fit = 1/sqrt(a+c-2*b/sin(2*angle_fit));
-        sigma_y_fit = 1/sqrt(a+c+2*b/sin(2*angle_fit));
-    else
-        sigma_y_fit = 1/sqrt(a+c-2*b/sin(2*angle_fit));
-        sigma_x_fit = 1/sqrt(a+c+2*b/sin(2*angle_fit));
-        disp('This case should not happen!')
-    end
-    
-    if angle_fit==0 ||sum(isnan([sigma_x_fit,sigma_y_fit]))>0
-        sigma_x_fit = 1/sqrt(2*a);
-        sigma_y_fit = 1/sqrt(2*c);
-    end
-    
-    fitData{1}(iPos,5:7) = [sigma_x_fit,sigma_y_fit,angle_fit];
-end
+% for iPos = 1:size(fitData{1},1)
+%     a = fitData{1}(iPos,5); b = fitData{1}(iPos,7); c = fitData{1}(iPos,6);
+%     angle_fit = 0.5*atan(2*b/(c-a));
+%     if abs(angle_fit)<=pi/4
+%         sigma_x_fit = 1/sqrt(a+c-2*b/sin(2*angle_fit));
+%         sigma_y_fit = 1/sqrt(a+c+2*b/sin(2*angle_fit));
+%     else
+%         sigma_y_fit = 1/sqrt(a+c-2*b/sin(2*angle_fit));
+%         sigma_x_fit = 1/sqrt(a+c+2*b/sin(2*angle_fit));
+%         disp('This case should not happen!')
+%     end
+%     
+%     if angle_fit==0 ||sum(isnan([sigma_x_fit,sigma_y_fit]))>0
+%         sigma_x_fit = 1/sqrt(2*a);
+%         sigma_y_fit = 1/sqrt(2*c);
+%     end
+%     
+%     fitData{1}(iPos,5:7) = [sigma_x_fit,sigma_y_fit,angle_fit];
+% end
 
 moment_truth = determineMoments(candidatePos,halfw,img_truth);
 

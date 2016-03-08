@@ -1,5 +1,5 @@
 function [ params, exitflag ] = psfFit( img, varargin )
-% Short usage: params = psfFit( img );
+% Short usage: params = psfFit( img );  (fits an isotropic gaussian)
 % Full usage: [ params, exitflag ] = psfFit( img, param_init, param_optimizeMask, useIntegratedGauss, useMLErefine)
 %  Fit a gaussian point spread function model to the given image.
 % 
@@ -10,14 +10,21 @@ function [ params, exitflag ] = psfFit( img, varargin )
 %
 % Use empty matrix [] for parameters you don't want to specify.
 %
+% Gaussian fitting covers three basic cases:
+%   - fitting isotropic gaussian  (sigma_y and angle initial values not specified and they should not be optimized)
+%   - fitting anisotropic gaussian  (angle initial value not specified and should not be optimized)
+%   - fitting anisotropic rotated gaussian
+%
 % Input:
 %   img - NxM image to fit to. (internally converted to double)
-%   param_init - Initial values [xpos,ypos,A,BG,sigma]. If negative values
-%                are given, the fitter estimates a value for that
-%                parameter. | default: -1*ones(5,1) -> 'estimate all'
+%   param_init - Initial values for parameters. You can specify up to [xpos;ypos;A;BG;sigma_x,sigma_y,angle].
+%                If negative or no values are given, the fitter estimates a value for that parameter if neccessary, 
+%                with the exception of the angle, which is estimated if angle==0 and if it should be optimized.
+%                If parameters are not optimized (see next entry) their values are kept constant during optimization.
 %   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma_x,sigma_y,angle].
-%                Parameters with value 'false' are not fitted. | default: [1,1,1,1,1,0,0] -> 'optimize x,y,A,BG,sigma' (2D case)
-%   useIntegratedGauss - Wether to use pixel integrated gaussian or not | default: false
+%                Parameters with value 'false' are not fitted. | default: [1,1,1,1,1,0,0] -> 'optimize x,y,A,BG,sigma' (isoptric gaussian)
+%   useIntegratedGauss - Wether to use pixel integrated gaussian or not 
+%                        not supported for non-isotropic arbitrarily roated gaussians | default: false
 %   useMLErefine - Use Poissonian noise based maximum likelihood estimation after
 %                  least squares fit. Make sure to input image intensities in photons 
 %                  for this to make sense. | default: false
@@ -33,15 +40,15 @@ function [ params, exitflag ] = psfFit( img, varargin )
 % http://ceres-solver.org, New BSD license.
 % Copyright 2015 Google Inc. All rights reserved.
 %
-% Author: Simon Christoph Stein, extended by Jan Thiart
-% Date: June 2015
+% Authors: Simon Christoph Stein and Jan Thiart
+% Date: March 2016
 % E-Mail: scstein@phys.uni-goettingen.de
 % 
 
 
 % -- Licensing --
 
-% Copyright (c) 2015, Simon Christoph Stein
+% Copyright (c) 2016, Simon Christoph Stein
 % All rights reserved.
 % 
 % Redistribution and use in source and binary forms, with or without
@@ -97,49 +104,13 @@ if numel(varargin) >= 2 && ~isempty(varargin{2});  varargin{2} = logical(varargi
 if numel(varargin) >= 3 && ~isempty(varargin{3});  varargin{3} = logical(varargin{3});  end
 if numel(varargin) >= 4 && ~isempty(varargin{4});  varargin{4} = logical(varargin{4});  end
 
-% Convert img to double if neccessary
-% sigma_x = varargin{1}(5);
-% sigma_y = varargin{1}(6);
-% angle = varargin{1}(7);
-% q1 = cos(angle).^2./(2*sigma_x.^2)+sin(angle).^2./(2*sigma_y.^2);
-% q2 = sin(angle).^2./(2*sigma_x.^2)+cos(angle).^2./(2*sigma_y.^2);
-% q3 = -sin(2*angle)./(4*sigma_x.^2)+sin(2*angle)./(4*sigma_y.^2);
-% varargin{1}(5:7) = [q1;q2;q3];
-
 % Set default optimization x,y,A,BG,sigma
 if( numel(varargin)<2 || isempty(varargin{2}) )
     varargin{2} = logical([1,1,1,1,1,0,0]);
 end
 
+% Convert img to double if neccessary
 [ params, exitflag ] = mx_psfFit( double(img), varargin{:});
-
-% Compute sigma_x, sigma_y, angle from the output values
-param_optimizeMask = varargin{2};
-
-fitSigma_y = param_optimizeMask(6);
-fitAngle = param_optimizeMask(7);
-
-if fitAngle
-    q1 = params(5); q2 = params(6); q3 = params(7);
-    angle = 0.5*atan(2*q3./(q2-q1)); %angle towards largest eigenvector axis in radian
-    sigma_x = 1./sqrt(q1+q2-2*q3./sin(2*angle));
-    sigma_y = 1./sqrt(q1+q2+2*q3./sin(2*angle));
-    
-    % if the angle is 0 or very close to 0, calculating sigma will fail
-    if angle == 0 || sum(isnan([sigma_x,sigma_y]),2)>0;
-        sigma_x = 1./sqrt(2*q1);
-        sigma_y = 1./sqrt(2*q2);
-        angle = 0;
-    end
-    
-    params(5:7) = [sigma_x;sigma_y;angle];
-else
-    if fitSigma_y
-        params(5:6) = sqrt(0.5./params(5:6));
-    else
-        params(5) = sqrt(0.5./params(5));
-    end
-end
 
 end
 

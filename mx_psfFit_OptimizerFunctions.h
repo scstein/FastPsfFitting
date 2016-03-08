@@ -44,6 +44,8 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <utility>
+#include <limits>
 
 // our headers
 #include "mexUtil.h"
@@ -65,12 +67,17 @@ using ceres::GradientProblemSolver;
 
 /// --  Prototypes -- ///
 
+
+// Convert the q values we optimize into sigma_x, sigma_y, angle
+void
+convert_Qs_To_SxSyAngle(double q_1, double q_2, double q_3, double& sigma_x, double& sigma_y, double& angle);
+
 /* Fit point spread function model to given image
  * Input:
  *   img - image to fit to
  *   xCoords - vector of x-coordinates to use (length must be img.nCols)
  *   yCoords - vector of y-coordinates to use (length must be img.nRows)
- *   param_init - 7 element vector of initial parameters [xpos,ypos,A,BG,q_1,q_2,q_3]. For negative values the function estimates the initial guess from the image.
+ *   param_init - 7 element vector of initial parameters [xpos,ypos,A,BG,sigma_x,sigma_y,angle]. For negative values the function estimates the initial guess from the image (except for angle, there use 0).
  *   param_optimizeMask - 7 element vector which is >0 for every element that should be optimized. Elements with mask <= 0 are kept constant.
  *   usePixelIntegratedGauss - Uses a pixel integrated gaussian model instead of a center-sampled one (slower but usually more accurate).
  *   useMLErefine - Refine least squares fit with Poissonian noise based maximum likelihood estimation.  Make sure to input image intensities in photons for this to make sense. This is computationally very expensive.
@@ -81,10 +88,10 @@ std::vector<double>
 fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::vector<double>& param_init, std::vector<bool>& param_optimMask, bool usePixelIntegratedGauss, bool useMLErefine = false);
 
 // Estimate the intital conditions for the fit.
-// Estimates are only computed for input parameters with negative values (e.g. givins xpos=-1) to the function.
+// Estimates are only computed for input parameters with negative values (e.g. giving xpos=-1) to the function (except for angle, there use 0).
 // If positive values are given, these are left untouched and taken as the initial guess.
-void
-estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3,std::vector<bool>& param_optimMask);
+void 
+estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double sigma_x,double sigma_y,double angle, double& q_1, double& q_2, double& q_3, std::vector<bool>& param_optimMask);
 
 // Set lower and upper bounds of parameters for the optimization
 void
@@ -102,27 +109,57 @@ getTerminationType(Solver::Summary& summary);
 int
 getTerminationType(GradientProblemSolver::Summary& summary);
 
+// Convert the q values we optimize into sigma_x, sigma_y, angle
+void
+convert_Qs_To_SxSyAngle(double q_1, double q_2, double q_3, double& sigma_x, double& sigma_y, double& angle)
+{
+    if(q_3 != 0)
+        angle = 0.5*atan(2*q_3/(q_2-q_1));
+    else
+        angle = 0;
+        
+    if(angle != 0)
+    {
+        sigma_x = 1/sqrt(q_1+q_2-2*q_3/sin(2*angle));
+        sigma_y = 1/sqrt(q_1+q_2+2*q_3/sin(2*angle));
+    } else
+    {
+        sigma_x = 1/sqrt(2*q_1);
+        if(q_2>=0)
+            sigma_y = 1/sqrt(2*q_2);
+        else
+            sigma_y = -1;
+    }
+}
+
 
 /// --  Functions -- ///
 std::vector<double> 
 fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::vector<double>& param_init, std::vector<bool>& param_optimMask, bool usePixelIntegratedGauss, bool useMLErefine)
 {   
     // The variables to solve for: x,y,A,BG,sigma
-    double xpos, ypos, A, BG, q_1, q_2, q_3;
+    double xpos, ypos, A, BG, sigma_x,sigma_y,angle, q_1, q_2, q_3;
     
       /// -- Setup intial conditions -- ///          
     xpos  = param_init[0];
     ypos  = param_init[1];
     A     = param_init[2];
     BG    = param_init[3];
-    q_1 = param_init[4];
-	q_2 = param_init[5];
-	q_3 = param_init[6];
+    sigma_x = param_init[4];
+	sigma_y = param_init[5];
+	angle = param_init[6];
     
-    estimateInitialConditions(img, xCoords,yCoords, xpos, ypos, A, BG, q_1, q_2, q_3, param_optimMask);
+    #ifdef DEBUG  
+        std::cout << "param_optimMask: x:" << std::boolalpha << param_optimMask[0] << ", y:" << param_optimMask[1] << ", A:" << param_optimMask[2] << ", BG:" << param_optimMask[3] << ", sx:" << param_optimMask[4] << ", sy:" << param_optimMask[5] << ", angle:" << param_optimMask[6] << "\n";
+        std::cout << "fitPSF input parameters [xpos,ypos,A,BG,sigma_x,sigma_y,angle]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << sigma_x << ", " << sigma_y << ", " << angle << " | usePixelIntegratedGauss:" << usePixelIntegratedGauss << "   useMLErefine:" << useMLErefine << "\n";
+    #endif
     
-    #ifdef DEBUG   
-      std::cout << "Initial parameters [xpos,ypos,A,BG,sigma]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << ", " << q_2 << ", " << q_3 << "\n";
+	// Note: sigma_x, sigma_y, angle are not altered here, but we get the q_X values needed for computation
+    estimateInitialConditions(img, xCoords,yCoords, xpos, ypos, A, BG, sigma_x, sigma_y, angle, q_1,q_2,q_3, param_optimMask);
+    
+    #ifdef DEBUG
+      convert_Qs_To_SxSyAngle(q_1, q_2, q_3, sigma_x, sigma_y, angle);    
+      std::cout << "Estimated initial parameters [xpos,ypos,A,BG,q_1 (sigma_x),q_2 (sigma_y),q_3 (angle)]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << " ("<<sigma_x<<"), " << q_2 << " ("<<sigma_y<<"), " << q_3 << " ("<<angle<<")" << "\n";
     #endif
       
     
@@ -130,24 +167,26 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
     Problem problem;
     
     CostFunction* cost_function;
-		if(param_optimMask[6])
+		if(param_optimMask[6] || angle != 0)
 		{
 			if(usePixelIntegratedGauss)
+            {
+                mexWarnMsgTxt("Pixel integrated non-isotropic arbitrarily rotated gaussians are not supported. Falling back to center-sampled gaussian.");
 				cost_function = new AutoDiffCostFunction<SampledGaussAnisoAngleResidual, ceres::DYNAMIC, 1,1,1,1,1,1,1>(  new SampledGaussAnisoAngleResidual(img, xCoords, yCoords), img.nElements);
 				// not implemented yet
 				// cost_function = new AutoDiffCostFunction<IntegratedGaussAnisoAngleResidual, ceres::DYNAMIC, 1,1,1,1,1,1,1>(  new IntegratedGaussAnisoAngleResidual(img, xCoords, yCoords), img.nElements);
+            }
 			else
 				cost_function = new AutoDiffCostFunction<SampledGaussAnisoAngleResidual, ceres::DYNAMIC, 1,1,1,1,1,1,1>(  new SampledGaussAnisoAngleResidual(img, xCoords, yCoords), img.nElements);
 
 			problem.AddResidualBlock(cost_function, NULL, &xpos, &ypos, &A, &BG, &q_1, &q_2, &q_3);
-			/* fitting an anisotropic rotated Gaussian while leaving sigma_x,sigma_y,angle constant makes no sense
-			if( param_optimMask[4] == 0 )  problem.SetParameterBlockConstant(&q_1);
-			if( param_optimMask[5] == 0 )  problem.SetParameterBlockConstant(&q_2);
-			if( param_optimMask[6] == 0 )  problem.SetParameterBlockConstant(&q_3); */
+			if( !param_optimMask[4] )  problem.SetParameterBlockConstant(&q_1);
+			if( !param_optimMask[5] )  problem.SetParameterBlockConstant(&q_2);
+			if( !param_optimMask[6] )  problem.SetParameterBlockConstant(&q_3);
 		}
 		else
 		{
-			if(param_optimMask[5])
+			if(param_optimMask[5] || sigma_y>=0)
 			{
 				if(usePixelIntegratedGauss)
 					cost_function = new AutoDiffCostFunction<IntegratedGaussAnisoResidual, ceres::DYNAMIC, 1,1,1,1,1,1>(  new IntegratedGaussAnisoResidual(img, xCoords, yCoords), img.nElements);
@@ -155,9 +194,8 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 					cost_function = new AutoDiffCostFunction<SampledGaussAnisoResidual, ceres::DYNAMIC, 1,1,1,1,1,1>(  new SampledGaussAnisoResidual(img, xCoords, yCoords), img.nElements);
 
 				problem.AddResidualBlock(cost_function, NULL, &xpos, &ypos, &A, &BG, &q_1, &q_2);
-				/* fitting an isotropic gaussian while leaving sigma_x,sigma_y constant makes no sense
-				if( !param_optimMask[4])  problem.SetParameterBlockConstant(&q_1);
-				if( !param_optimMask[5])  problem.SetParameterBlockConstant(&q_2); */
+				if( !param_optimMask[4] )  problem.SetParameterBlockConstant(&q_1);
+				if( !param_optimMask[5] )  problem.SetParameterBlockConstant(&q_2);
 			}
 			else
 			{
@@ -167,7 +205,7 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 					cost_function = new AutoDiffCostFunction<SampledGaussResidual, ceres::DYNAMIC, 1,1,1,1,1>(  new SampledGaussResidual(img, xCoords, yCoords), img.nElements);
 
 				problem.AddResidualBlock(cost_function, NULL, &xpos, &ypos, &A, &BG, &q_1);
-				if( !param_optimMask[4])  problem.SetParameterBlockConstant(&q_1); //only when dealing with an isotropic Gaussian can we decide if sigma should be fitted or not
+				if( !param_optimMask[4] )  problem.SetParameterBlockConstant(&q_1); //only when dealing with an isotropic Gaussian can we decide if sigma should be fitted or not
 			}
 		}
     
@@ -199,7 +237,8 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
     
     #ifdef DEBUG   
       std::cout << summary.BriefReport() << "\n";
-      std::cout << "Final parameters [xpos,ypos,A,BG,q_1,q_2,q_3]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << ", " << q_2 ", " << q_3 << "\n";
+      convert_Qs_To_SxSyAngle(q_1, q_2, q_3, sigma_x, sigma_y, angle);    
+      std::cout << "Final parameters [xpos,ypos,A,BG,q_1 (sigma_x),q_2 (sigma_y),q_3 (angle)]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << " ("<<sigma_x<<"), " << q_2 << " ("<<sigma_y<<"), " << q_3 << " ("<<angle<<")" << std::endl << std::endl;
     #endif
       
     /// -- Output -- ///
@@ -310,9 +349,14 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 
 
 
-void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3, std::vector<bool>& param_optimMask)
+void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double sigma_x,double sigma_y,double angle, double& q_1, double& q_2, double& q_3, std::vector<bool>& param_optimMask)
 {
+	q_1 = std::numeric_limits<double>::quiet_NaN();
+	q_2 = q_1;
+	q_3 = q_1;
 
+	double sigma_x_guess, sigma_y_guess, angle_guess;
+	
 	// Background guess
     // -> take mean along the border pixels
     if(BG<0)
@@ -341,10 +385,13 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
         }
     }
 
-
-	// If fitting a non-isotropic rotated Gaussian, initial parameters will be guessed by SVD
-	double m_00 = 0, m_10 = 0, m_01 = 0, m_11 = 0, m_20 = 0, m_02 = 0, img_tmp = 0, tau = 0, delta = 0, angle = 0, q_tmp, sigma_part = 0;
-	if(param_optimMask[6])
+	if( !(sigma_x>0 && sigma_y>0 && angle!= 0 ) )
+	{
+	// sigma y and angle are not given and should not be optimized
+	bool psf_is_isotropic(  !param_optimMask[5] && !param_optimMask[6] && sigma_y<0 && angle==0 );
+	
+	double m_00 = 0, m_10 = 0, m_01 = 0, m_11 = 0, m_20 = 0, m_02 = 0, img_tmp = 0, tau = 0, delta = 0, theta = 0, q_tmp, sigma_part = 0;
+	if( !psf_is_isotropic || sigma_x < 0)
 	{
 		// calculate intensity moments
 		for(unsigned int iCol = 0; iCol<img.nCols; ++iCol)
@@ -369,22 +416,26 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
 		//calculate trace and determinant and from that, q_1 to q_3
 		tau = m_20+m_02;
 		delta = m_20*m_02-m_11*m_11;
-		angle = 0.5*atan(2*m_11/(m_20-m_02));
+		theta = 0.5*atan(2*m_11/(m_20-m_02));
 
 		sigma_part = sqrt(tau*tau-4*delta);
+	}
+	
 
+	// If fitting a non-isotropic rotated Gaussian, initial parameters will be guessed by SVD
+	if(param_optimMask[6] || angle != 0)
+	{
 		if (tau > sigma_part) // is positive definite?
 		{
-			if (angle != 0)
+			if (theta != 0)
 			{
-				q_1 = cos(angle)*cos(angle)/(tau+sigma_part)+sin(angle)*sin(angle)/(tau-sigma_part);
-				q_2 = sin(angle)*sin(angle)/(tau+sigma_part)+cos(angle)*cos(angle)/(tau-sigma_part);
-				q_3 = -0.5*sin(2*angle)/(tau+sigma_part)+0.5*sin(2*angle)/(tau-sigma_part);
-				if(m_20 <= m_10)
+				q_1 = cos(theta)*cos(theta)/(tau+sigma_part)+sin(theta)*sin(theta)/(tau-sigma_part);
+				q_2 = sin(theta)*sin(theta)/(tau+sigma_part)+cos(theta)*cos(theta)/(tau-sigma_part);
+				q_3 = -0.5*sin(2*theta)/(tau+sigma_part)+0.5*sin(2*theta)/(tau-sigma_part);
+                
+				if(m_20 <= m_02)
 				{
-					q_tmp = q_2;
-					q_2 = q_1;
-					q_1 = q_tmp;
+					swap(q_1,q_2);
 					q_3 = -q_3;
 				}
 			}
@@ -393,11 +444,9 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
 				q_1 = 0.5/m_20;
 				q_2 = 0.5/m_02;
 				q_3 = 0;
-				if(m_20 <= m_10)
+				if(m_20 <= m_02)
 				{
-					q_tmp = q_2;
-					q_2 = q_1;
-					q_1 = q_tmp;
+					swap(q_1,q_2);
 				}
 			}
 		}
@@ -410,38 +459,19 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
 
 
 	}
-	else if(param_optimMask[5])
+	else if(  param_optimMask[5] || sigma_y >=0  )
 	{
 		q_3 = 0;
-		if (q_1< 0 || q_2 < 0)
+		if (sigma_x < 0 || sigma_y < 0)
 		{
-			// calculate intensity moments without angular component
-			for(unsigned int iCol = 0; iCol<img.nCols; ++iCol)
-			{
-				for(unsigned int iRow = 0; iRow<img.nRows; ++iRow)
-				{
-					img_tmp = (0<(img(iRow,iCol)-BG))?(img(iRow,iCol)-BG):0;
-					m_00 += img_tmp;
-					m_10 += iCol*img_tmp;
-					m_01 += iRow*img_tmp;
-					m_20 = iCol*iCol*img_tmp;
-					m_02 = iRow*iRow*img_tmp;
-				}
-			}
-			//normalize
-			m_10 /= m_00, m_01 /= m_00, m_20 /= m_00, m_02 /= m_00;
-			m_20 -= m_10*m_10, m_02 -= m_01*m_01;
-
 			if (0.5*(m_20+m_02) > sqrt((4*m_11*m_11+(m_20-m_02)*(m_20-m_02))/2))
 			{
 				// check largest EV
 				q_1 = 0.5/m_20;
 				q_2 = 0.5/m_02;
-				if(m_20 <= m_10)
+				if(m_20 <= m_02)			
 				{
-					q_tmp = q_2;
-					q_2 = q_1;
-					q_1 = q_tmp;
+					swap(q_1,q_2);
 				}
 			}
 			else
@@ -452,15 +482,78 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
 		}
 
 	}
-	else
+	else if(sigma_x<0)
 	{
+		q_1 = 1/tau;
 		q_2 = -1;
 		q_3 = 0;
-		if (q_1<0)
-			// Standard deviation guess (not unusal for typical PSF fitting)
-			q_1 = 0.5/(1.25*1.25);
+	} 
+		   
+	bool computed_q_vals = (q_1==q_1) && (q_2==q_2) && (q_3==q_3); // check for NaN
+	if( computed_q_vals )
+	{
+        convert_Qs_To_SxSyAngle(q_1, q_2, q_3, sigma_x_guess, sigma_y_guess, angle_guess);	
+	} else
+    {
+        q_1 = -1;
+        q_2 = -1;
+        q_3 = 0;
+        
+        sigma_x_guess = -1;
+        sigma_y_guess = -1;
+        angle_guess = 0;
+    }
+	
+	}
+    
+	if(param_optimMask[6] || angle != 0)
+	{
+		  angle = fmod(angle,M_PI);
+		 //if(angle>= M_PI/4 && angle && angle< M_PI/4) // valid domain of definition
+		  if(angle>= 0.25*M_PI && angle < 0.75*M_PI)
+		  {  
+			angle -= 0.5*M_PI;
+			swap(sigma_x,sigma_y);
+		  } else if( fabs(angle) > 0.75*M_PI  || angle == 0.75*M_PI)
+		  {
+			angle = (angle<0) ? angle+M_PI : angle-M_PI;
+		  } else if ( angle >= -0.75*M_PI && angle < -0.25*M_PI)
+		  {
+			  angle += 0.5*M_PI;
+			  swap(sigma_x,sigma_y);
+		  }
 	}
 		
+	if(sigma_x < 0 )
+		sigma_x = sigma_x_guess;
+	
+	if(sigma_y < 0 )
+		sigma_y = sigma_y_guess;
+	
+	if(param_optimMask[6] && angle == 0)
+    {
+		angle = angle_guess;
+    }
+	
+
+			
+	if(angle == 0)
+	{
+		q_1 = 1/(2*sigma_x*sigma_x);
+		if(sigma_y>0)
+			q_2 = 1/(2*sigma_y*sigma_y);
+		else
+			q_2 = -1;
+		q_3 = 0;
+	} else
+	{
+        
+		q_1 = cos(angle)*cos(angle)/(2*sigma_x*sigma_x)+sin(angle)*sin(angle)/(2*sigma_y*sigma_y);
+        q_2 = sin(angle)*sin(angle)/(2*sigma_x*sigma_x)+cos(angle)*cos(angle)/(2*sigma_y*sigma_y);
+        q_3 = -sin(2*angle)/(4*sigma_x*sigma_x)+sin(2*angle)/(4*sigma_y*sigma_y);
+	}
+	
+	
    
     // If xpos, ypos or amplitude should be guessed, find the image maximum value and its position. For non-isotropic Gaussians, calculate centroid and eccentricity
 	double xpos_tmp = 0, ypos_tmp = 0, img_max = 0;
@@ -490,8 +583,7 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
         
     // Amplitude guess
     if (A<0)
-        A = img_max-BG;
-        
+        A = img_max-BG;        
 }
 
 void setParameterBounds(Problem& problem, Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& q_1,double& q_2,double& q_3)

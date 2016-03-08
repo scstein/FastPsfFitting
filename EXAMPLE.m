@@ -9,6 +9,7 @@
 
 imsize = 128;
 BG = 100;
+sigma = 1;
 nr_emitters = 10;
 with_noise = false;
 
@@ -18,7 +19,7 @@ psfFunc = @(x0,y0,A,sigma) A*exp(-(x-x0).^2/(2*sigma^2)-(y-y0).^2/(2*sigma^2));
 % Emitters vary in position, brightness and standard deviation.
 em_pos = 5+rand(nr_emitters,2)*(imsize-5);
 em_amp = 300+rand(nr_emitters,1)*100;
-em_sig = 0.75 + rand(nr_emitters,1)*0.5;
+em_sig = sigma + rand(nr_emitters,1)*0.5;
 
 img = zeros(imsize) + BG;
 for iEm = 1:nr_emitters
@@ -34,7 +35,7 @@ end
 par_init = em_pos + 1.5*(2*rand(nr_emitters,2)-1); % As intial guess we add noise to the true values
 par_init = par_init';
 
-result_params = psfFit_Image( img, par_init); % This is the simplest possible call, see psfFit_Image for all options
+result_params = psfFit_Image( img, par_init ); % This is the simplest possible call, see psfFit_Image for all options
 
 
 % 3) Display the result

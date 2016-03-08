@@ -1,4 +1,4 @@
-// Author: Simon Christoph Stein
+// Authors: Simon Christoph Stein and Jan Thiart
 // E-Mail: scstein@phys.uni-goettingen.de
 // Date: June 2015
 
@@ -33,7 +33,6 @@
 // % of the authors and should not be interpreted as representing official policies,
 // % either expressed or implied, of the FreeBSD Project.
 
-
 // Use OpenMP if available to parallelize computation
 #ifdef _OPENMP
     #include <omp.h>
@@ -67,55 +66,59 @@ int round_positive(double x)
     return (int)(x + 0.5);
 }
 
-// --   psfFit_Image  --
-// % Short usage: params = psfFit_Image( img, param_init );
-// % Full usage: [ params, exitflag ] = psfFit_Image( img, param_init, param_optimizeMask, useIntegratedGauss, hWinSize, sigma_init )
-// %  Fit multiple spot candidates in a given image with a gaussian point spread function model.
-// % 
-// % Coordinate convention: Integer coordinates are centered in pixels. I.e.
-// % the position xpos=3, ypos=5 is exactly the center of pixel img(5,3). Thus
-// % pixel center coordinates range from 1 to size(img,2) for x and 1 to
-// % size(img,1) for y coordinates.
-// %
-// % Use empty matrix [] for parameters you don't want to specify.
-// %
-// % Input:
-// %   img        - Image to fit to.
-// %   param_init - Initial values PxN to fit N spot candidates in the given image with
-// %                initial conditions for P parameters. At least position [xpos; ypos] 
-// %                must be specified (P>=2). You can specify up to [xpos;ypos;A;BG;q_1;q_2;q_3]. 
-// %                If negative values are given, the fitter estimates a value for that parameter.
-// %   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma_x,sigma_y,angle]. 
-// %                Parameters with value 'false' are not fitted. | default: ones(7,1) -> 'optimize all'
-// %   useIntegratedGauss - Wether to use pixel integrated gaussian or not | default: 'false'
-// %   useMLErefine - Use Poissonian noise based maximum likelihood estimation after
-// %                  least squares fit. Make sure to input image intensities in photons 
-// %                  for this to make sense. | default: false
-// %   hWinSize   - window around each candidate is (2*hWinsize+1)x(2*hWinsize+1) | default: 5
-// %   sigma_init - For convenience sigma can also be given as an extra parameter.
-// %               This simply sets all candidates initial sigma to sigma_init. 
-// %               This overwrites the value given in param_init.
-// %
-// % Output
-// %   params     -  Fitted parameters 6xN. Columns are in order
-// %                 [xpos;
-//                    ypos;
-//                    A;
-//                    BG;
-//                    q_1 (related to sigma_x);
-//                    q_2 (related to sigma_y);
-//                    q_3 (related to angle);
-//                    exitflag].
-// %             
-// %           The last row 'exitflag' returns the state of optimizer. 
-// %           Positive = 'good'. Negative = 'bad'.
-// %             1 - CONVERGENCE
-// %            -1 - NO_CONVERGENCE
-// %            -2 - FAILURE
-// %
-// % Author: Simon Christoph Stein, extended by Jan Thiart
-// % Date:   June 2015
-// % E-Mail: scstein@phys.uni-goettingen.de
+/*
+% Short usage: params = psfFit_Image( img, param_init );
+% Full usage: [ params, exitflag ] = psfFit_Image( img, param_init, param_optimizeMask, useIntegratedGauss, useMLErefine, hWinSize, global_init )
+%  Fit multiple spot candidates in a given image with a gaussian point spread function model.
+%
+% Coordinate convention: Integer coordinates are centered in pixels. I.e.
+% the position xpos=3, ypos=5 is exactly the center of pixel img(5,3). Thus
+% pixel center coordinates range from 1 to size(img,2) for x and 1 to
+% size(img,1) for y coordinates.
+%
+% Use empty matrix [] for parameters you don't want to specify.
+%
+% Gaussian fitting covers three basic cases:
+%   - fitting isotropic gaussian  (sigma_y and angle initial values not specified and they should not be optimized)
+%   - fitting anisotropic gaussian  (angle initial value not specified and should not be optimized)
+%   - fitting anisotropic rotated gaussian
+%
+% The fitting case is selcted based on the set of specified initial
+% parameters together with the set of parameters that should be optimized.
+%
+% Input:
+%   img        - Image to fit to. (internally converted to double)
+%   param_init - Initial values PxN to fit N spot candidates in the given image with
+%                initial conditions for P parameters. At least position [xpos; ypos]
+%                must be specified (P>=2). You can specify up to [xpos;ypos;A;BG;sigma_x,sigma_y,angle].
+%                If negative or no values are given, the fitter estimates a value for that parameter if neccessary, 
+%                with the exception of the angle, which is estimated if angle==0 and if it should be optimized.
+%                If parameters are not optimized (see next entry) their values are kept constant during optimization.
+%   param_optimizeMask - Must be true(1)/false(0) for every parameter [xpos,ypos,A,BG,sigma_x,sigma_y,angle].
+%                Parameters with value 'false' are not fitted.  | default: [1,1,1,1,1,0,0] -> 'optimize x,y,A,BG,sigma' (isoptric gaussian)
+%   useIntegratedGauss - Wether to use pixel integrated gaussian or not 
+%                  not supported for non-isotropic arbitrarily roated gaussians | default: false
+%   useMLErefine - Use Poissonian noise based maximum likelihood estimation after
+%                  least squares fit. Make sure to input image intensities in photons
+%                  for this to make sense. | default: false
+%   hWinSize   - Each candidates fit takes intensites in a window of (2*hWinsize+1)x(2*hWinsize+1) into account | default: 5
+%   global_init - For convenience (up to) [sigma_x,sigma_y,angle] can also be given as an extra parameter.
+%               This simply sets all candidates initial values, eventually overwriting their param_init values.
+%
+% Output
+%   params     -  Fitted parameters 8xN. Columns are in order
+%                 [xpos,ypos,A,BG,sigma_x,sigma_y,angle; exitflag].
+%
+%           The last row 'exitflag' returns the state of optimizer.
+%           Positive = 'good'. Negative = 'bad'.
+%             1 - CONVERGENCE
+%            -1 - NO_CONVERGENCE
+%            -2 - FAILURE
+%
+% Authors: Simon Christoph Stein and Jan Thiart
+% Date:   March 2016
+% E-Mail: scstein@phys.uni-goettingen.de
+*/
 void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 {
     // Replace the std stream with the 'matlab' stream to see cout outputs in the MATLAB console
@@ -127,7 +130,6 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
             printf("OpenMP number of threads @ start: %i\n", omp_get_num_threads()); // Test if openMP is included correctly
         #endif
     #endif
-    
         
         /// -- Input parsing -- ///   
     
@@ -149,10 +151,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     bool useMLErefine = false;
     
     if( param_init.nElements == 0 )
-        mexErrMsgTxt("Feed me at least one spot candidate! Specify [xpos;ypos]  or [xpos;ypos;A;BG;q_1;q_2;q_3]");
+        mexErrMsgTxt("Feed me at least one spot candidate! Specify [xpos;ypos]  or [xpos;ypos;A;BG;sigma_x;sigma_y;angle]");
     
     if( nr_given_params < 2)
-        mexErrMsgTxt("Specify initial condition for at least position [xpos,ypos]! Or speficy in order [xpos;ypos;A;BG;q_1;q_2;q_3]. \n Use negative values for parameters you don't want to specify!");
+        mexErrMsgTxt("Specify initial condition for at least position [xpos,ypos]! Or speficy in order [xpos;ypos;A;BG;sigma_x;sigma_y;angle]. \n Use negative values for parameters you don't want to specify! (Except for angle, there use angle==0)");
         
     if(nrhs>2)
     {
@@ -160,7 +162,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
        if( !p_optimMask.isEmpty() ) 
        {
          if(p_optimMask.nElements != 7)
-             mexErrMsgTxt("Specify for every parameter if it should be optimized. [xpos,ypos,A,BG,q_1,q_2,q_3].\n Use false to not optimize a parameter.");
+             mexErrMsgTxt("Specify for every parameter if it should be optimized. [xpos,ypos,A,BG,sigma_x,sigma_y,angle].\n Use false to not optimize a parameter.");
          else
          {
             bool* logical = mxGetLogicals(prhs[2]);
@@ -197,14 +199,13 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
             hWinSize = int(input_winsize[0] + 0.5);
     }
     
-    bool sigma_given = false;
-    double sigma_init = 0;
+    
+    std::vector<double> global_init_vals;
     if(nrhs>6)
     {
-        Array1D input_sigma( prhs[6] );
-        if( !input_sigma.isEmpty() )
-            sigma_init = input_sigma[0];
-        sigma_given = true;
+        Array1D global_init( prhs[6] );
+        for(int i=0; i<global_init.nElements; ++i)            
+            global_init_vals.push_back(global_init[i]);
     }
     
     
@@ -266,16 +267,17 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
         std::vector<double> p_init(7);
         p_init[0] = param_init(0,iCand);
         p_init[1] = param_init(1,iCand);        
-        p_init[2] = (nr_given_params == 3) ?  param_init(2,iCand):-1;
-        p_init[3] = (nr_given_params == 4) ?  param_init(3,iCand):-1;
-        p_init[4] = (nr_given_params == 5) ?  param_init(4,iCand):-1;
-		p_init[5] = (nr_given_params == 6) ?  param_init(5,iCand):-1;
-		p_init[6] = (nr_given_params == 7) ?  param_init(6,iCand):0;
+        p_init[2] = (nr_given_params >= 3) ?  param_init(2,iCand):-1;
+        p_init[3] = (nr_given_params >= 4) ?  param_init(3,iCand):-1;
+        p_init[4] = (nr_given_params >= 5) ?  param_init(4,iCand):-1;
+		p_init[5] = (nr_given_params >= 6) ?  param_init(5,iCand):-1;
+		p_init[6] = (nr_given_params >= 7) ?  param_init(6,iCand):0; // angle is special as any value (-infty,infty) can make sense
         
-        if(sigma_given) // If user gave extra sigma value this takes precedence
-		{ 
-            p_init[4] = 1./(2.*sigma_init*sigma_init);
-		}
+        // If user gave global [sigma_x,sigma_y,angle] this takes precedence
+        for(int i=0; i<global_init_vals.size(); ++i)
+        {
+            p_init[i+4] = global_init_vals[i];
+        }
 
         // Fit image, collect results
         std::vector<double> results = fitPSF(sub_img, xCoords, yCoords, p_init, param_optimMask, usePixelIntegratedGauss, useMLErefine);
@@ -284,10 +286,17 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
         fin_params(0,iCand) = results[0]; // x
         fin_params(1,iCand) = results[1]; // y
         fin_params(2,iCand) = results[2]; // A
-        fin_params(3,iCand) = results[3]; // BG
-        fin_params(4,iCand) = results[4]; // q1 (related to sigma_x)        
-		fin_params(5,iCand) = results[5]; // q2 (related to sigma_y)
-		fin_params(6,iCand) = results[6]; // q3 (related to angle)
+        fin_params(3,iCand) = results[3]; // BG        
+        // results[4]; // q1 (related to sigma_x)        
+		// results[5]; // q2 (related to sigma_y)
+		// results[6]; // q3 (related to angle)
+        
+        double sigma_x, sigma_y, angle;
+        convert_Qs_To_SxSyAngle( results[4], results[5], results[6], sigma_x, sigma_y, angle);
+        fin_params(4,iCand) = sigma_x;       
+		fin_params(5,iCand) = sigma_y;
+		fin_params(6,iCand) = angle;
+        
         fin_params(7,iCand) = results[7]; // exitflag
     }
     
