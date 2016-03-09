@@ -42,5 +42,5 @@ elseif isunix
     mx_psfFit.cpp
     
     % Copy ceres library files (including symbolic links) into this folder
-    !cp ceres-windows/ceres-solver/build/lib/*.so* ./ 
+    !cp ceres-windows/ceres-solver/build/lib/libceres.so* ./ 
 end
