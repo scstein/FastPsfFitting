@@ -83,8 +83,9 @@ int round_positive(double x)
 %   - fitting anisotropic gaussian  (angle initial value not specified and should not be optimized)
 %   - fitting anisotropic rotated gaussian
 %
-% The fitting case is selcted based on the set of specified initial
+% The fitting case is selected based on the set of specified initial
 % parameters together with the set of parameters that should be optimized.
+% The angle input/output should be in degree.
 %
 % Input:
 %   img        - Image to fit to. (internally converted to double)
@@ -271,7 +272,9 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
         p_init[3] = (nr_given_params >= 4) ?  param_init(3,iCand):-1;
         p_init[4] = (nr_given_params >= 5) ?  param_init(4,iCand):-1;
 		p_init[5] = (nr_given_params >= 6) ?  param_init(5,iCand):-1;
-		p_init[6] = (nr_given_params >= 7) ?  param_init(6,iCand):0; // angle is special as any value (-infty,infty) can make sense
+        // Angle is special as any value (-infty,infty) can make sense.
+        // Also we convert it from degrees to radian here, which is the input needed by fitPSF.
+		p_init[6] = (nr_given_params >= 7) ?  param_init(6,iCand)*M_PI/180.:0;
         
         // If user gave global [sigma_x,sigma_y,angle] this takes precedence
         for(int i=0; i<global_init_vals.size(); ++i)
@@ -293,9 +296,9 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
         
         double sigma_x, sigma_y, angle;
         convert_Qs_To_SxSyAngle( results[4], results[5], results[6], sigma_x, sigma_y, angle);
-        fin_params(4,iCand) = sigma_x;       
+        fin_params(4,iCand) = sigma_x;    
 		fin_params(5,iCand) = sigma_y;
-		fin_params(6,iCand) = angle;
+		fin_params(6,iCand) = angle*180./M_PI; // back-convert from radian to degree
         
         fin_params(7,iCand) = results[7]; // exitflag
     }

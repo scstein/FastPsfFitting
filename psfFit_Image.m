@@ -15,8 +15,9 @@ function [ params ] = psfFit_Image( img, varargin )
 %   - fitting anisotropic gaussian  (angle initial value not specified and should not be optimized)
 %   - fitting anisotropic rotated gaussian
 %
-% The fitting case is selcted based on the set of specified initial
+% The fitting case is selected based on the set of specified initial
 % parameters together with the set of parameters that should be optimized.
+% The angle input/output should be in degree.
 %
 % Input:
 %   img        - Image to fit to. (internally converted to double)

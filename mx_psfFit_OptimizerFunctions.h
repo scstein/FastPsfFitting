@@ -81,6 +81,9 @@ convert_Qs_To_SxSyAngle(double q_1, double q_2, double q_3, double& sigma_x, dou
  *   param_optimizeMask - 7 element vector which is >0 for every element that should be optimized. Elements with mask <= 0 are kept constant.
  *   usePixelIntegratedGauss - Uses a pixel integrated gaussian model instead of a center-sampled one (slower but usually more accurate).
  *   useMLErefine - Refine least squares fit with Poissonian noise based maximum likelihood estimation.  Make sure to input image intensities in photons for this to make sense. This is computationally very expensive.
+ *
+ *  Note: the angle input/output to fitPSF is in radian, not degree!
+ *
  * Output:
  *   results - 8 element vector of fitted parameters [xpos,ypos,A,BG,q_1,q_2,q_3, exitflag]. Exitflag contains the exit state of the solver, which is positive for success and negative for failure. (for more detail see getTerminationType)
 */   
@@ -91,7 +94,7 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 // Estimates are only computed for input parameters with negative values (e.g. giving xpos=-1) to the function (except for angle, there use 0).
 // If positive values are given, these are left untouched and taken as the initial guess.
 void 
-estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double sigma_x,double sigma_y,double angle, double& q_1, double& q_2, double& q_3, std::vector<bool>& param_optimMask);
+estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& sigma_x,double& sigma_y,double& angle, double& q_1, double& q_2, double& q_3, std::vector<bool>& param_optimMask);
 
 // Set lower and upper bounds of parameters for the optimization
 void
@@ -151,15 +154,13 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
     
     #ifdef DEBUG  
         std::cout << "param_optimMask: x:" << std::boolalpha << param_optimMask[0] << ", y:" << param_optimMask[1] << ", A:" << param_optimMask[2] << ", BG:" << param_optimMask[3] << ", sx:" << param_optimMask[4] << ", sy:" << param_optimMask[5] << ", angle:" << param_optimMask[6] << "\n";
-        std::cout << "fitPSF input parameters [xpos,ypos,A,BG,sigma_x,sigma_y,angle]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << sigma_x << ", " << sigma_y << ", " << angle << " | usePixelIntegratedGauss:" << usePixelIntegratedGauss << "   useMLErefine:" << useMLErefine << "\n";
+        std::cout << "fitPSF input parameters [ xpos,ypos,A,BG,sigma_x,sigma_y,angle[rad] ]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << sigma_x << ", " << sigma_y << ", " << angle << " | usePixelIntegratedGauss:" << usePixelIntegratedGauss << "   useMLErefine:" << useMLErefine << "\n";
     #endif
     
-	// Note: sigma_x, sigma_y, angle are not altered here, but we get the q_X values needed for computation
     estimateInitialConditions(img, xCoords,yCoords, xpos, ypos, A, BG, sigma_x, sigma_y, angle, q_1,q_2,q_3, param_optimMask);
     
     #ifdef DEBUG
-      convert_Qs_To_SxSyAngle(q_1, q_2, q_3, sigma_x, sigma_y, angle);    
-      std::cout << "Estimated initial parameters [xpos,ypos,A,BG,q_1 (sigma_x),q_2 (sigma_y),q_3 (angle)]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << " ("<<sigma_x<<"), " << q_2 << " ("<<sigma_y<<"), " << q_3 << " ("<<angle<<")" << "\n";
+      std::cout << "Estimated initial parameters [xpos,ypos,A,BG,q_1 (sigma_x),q_2 (sigma_y),q_3 (angle[rad])]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << " ("<<sigma_x<<"), " << q_2 << " ("<<sigma_y<<"), " << q_3 << " ("<<angle<<")" << "\n";
     #endif
       
     
@@ -238,7 +239,7 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
     #ifdef DEBUG   
       std::cout << summary.BriefReport() << "\n";
       convert_Qs_To_SxSyAngle(q_1, q_2, q_3, sigma_x, sigma_y, angle);    
-      std::cout << "Final parameters [xpos,ypos,A,BG,q_1 (sigma_x),q_2 (sigma_y),q_3 (angle)]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << " ("<<sigma_x<<"), " << q_2 << " ("<<sigma_y<<"), " << q_3 << " ("<<angle<<")" << std::endl << std::endl;
+      std::cout << "Final parameters [xpos,ypos,A,BG,q_1 (sigma_x),q_2 (sigma_y),q_3 (angle[rad])]: " << xpos << ", " << ypos << ", " << A << ", " << BG << ", " << q_1 << " ("<<sigma_x<<"), " << q_2 << " ("<<sigma_y<<"), " << q_3 << " ("<<angle<<")" << std::endl << std::endl;
     #endif
       
     /// -- Output -- ///
@@ -349,7 +350,7 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
 
 
 
-void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double sigma_x,double sigma_y,double angle, double& q_1, double& q_2, double& q_3, std::vector<bool>& param_optimMask)
+void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, double& xpos,double& ypos,double& A,double& BG,double& sigma_x,double& sigma_y,double& angle, double& q_1, double& q_2, double& q_3, std::vector<bool>& param_optimMask)
 {
 	q_1 = std::numeric_limits<double>::quiet_NaN();
 	q_2 = q_1;
@@ -398,7 +399,11 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
 		{
 			for(unsigned int iRow = 0; iRow<img.nRows; ++iRow)
 			{
-				img_tmp = (0<(img(iRow,iCol)-BG))?(img(iRow,iCol)-BG):0;
+                // Set img_tmp to zero if negative
+                img_tmp = (img(iRow,iCol)-BG);
+                if( img_tmp< 0 )
+                    continue;
+                
 				m_00 += img_tmp;
 				m_10 += iCol*img_tmp;
 				m_01 += iRow*img_tmp;
@@ -451,7 +456,7 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
 			}
 		}
 		else
-		{
+		{ // Default guess for fluorescence images in case estimation failes (sigma = 1.25 px)
 			q_1 = 0.5/(1.25*1.25);
 			q_2 = 0.5/(1.25*1.25);
 			q_3 = 0.1;
@@ -464,7 +469,7 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
 		q_3 = 0;
 		if (sigma_x < 0 || sigma_y < 0)
 		{
-			if (0.5*(m_20+m_02) > sqrt((4*m_11*m_11+(m_20-m_02)*(m_20-m_02))/2))
+			if (tau > sigma_part) // is positive definite?
 			{
 				// check largest EV
 				q_1 = 0.5/m_20;
@@ -476,15 +481,18 @@ void estimateInitialConditions(Array2D& img, std::vector<int>& xCoords, std::vec
 			}
 			else
 			{
+                // Default guess for fluorescence images in case estimation failes (sigma = 1.25 px)
 				q_1 = 0.5/(1.25*1.25);
 				q_2 = 0.5/(1.25*1.25);
 			}
 		}
-
 	}
 	else if(sigma_x<0)
 	{
-		q_1 = 1/tau;
+        if(tau>0)
+            q_1 = 1/tau;
+        else // Default guess for fluorescence images in case estimation failes (sigma = 1.25 px)
+            q_1 = 0.5/(1.25*1.25);
 		q_2 = -1;
 		q_3 = 0;
 	} 

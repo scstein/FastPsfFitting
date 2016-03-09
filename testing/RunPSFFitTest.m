@@ -25,7 +25,6 @@ candidatePos = randi([optionsSim.halfwMask,optionsSim.imWidth-optionsSim.halfwMa
 %% Create simulated image with predetermined positions
 [candidatePos,img,img_truth,ground_truth] = createPSFFitTest(candidatePos, optionsSim,optionsFit,plotFits);
 
-
 %% Test performance
 [params] = psfFit_Image( img, candidatePos.',optionsFit.varsToFit,optionsFit.usePixelIntegratedFit,optionsFit.useMLE,optionsFit.halfw,optionsSim.PSFsigma);
 fitData = {params(:,params(end,:)==1).'};

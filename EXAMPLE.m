@@ -32,11 +32,13 @@ end
 
 
 % 2) Fit the candidates
-par_init = em_pos + 1.5*(2*rand(nr_emitters,2)-1); % As intial guess we add noise to the true values
+% As intial guess we add noise to the true positions
+par_init = em_pos + 1.5*(2*rand(nr_emitters,2)-1); 
 par_init = par_init';
 
-result_params = psfFit_Image( img, par_init ); % This is the simplest possible call, see psfFit_Image for all options
-
+% This is the simplest possible call, where we only supply the candidate position guesses as initial parameters. 
+% See psfFit_Image for all options.
+result_params = psfFit_Image( img, par_init ); 
 
 % 3) Display the result
 figure; imagesc(img); colormap hot; axis image;

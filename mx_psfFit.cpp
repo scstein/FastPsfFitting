@@ -69,6 +69,10 @@ using namespace std;
 // %   - fitting anisotropic gaussian  (angle initial value not specified and should not be optimized)
 // %   - fitting anisotropic rotated gaussian
 // %
+// % The fitting case is selected based on the set of specified initial
+// % parameters together with the set of parameters that should be optimized.
+// % The angle input/output should be in degree.
+// %
 // % Input:
 // %   img - NxM image to fit to. (internally converted to double)
 // %   param_init - Initial values for parameters. You can specify up to [xpos;ypos;A;BG;sigma_x,sigma_y,angle].
@@ -97,6 +101,7 @@ using namespace std;
 // % Authors: Simon Christoph Stein and Jan Thiart
 // % Date: March 2016
 // % E-Mail: scstein@phys.uni-goettingen.de
+// % 
 void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 {
     // Replace the std stream with the 'matlab' stream to see cout outputs in the MATLAB console
@@ -165,7 +170,9 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     p_init[3] = (nr_given_params >= 4) ?  param_init[3]:-1;
     p_init[4] = (nr_given_params >= 5) ?  param_init[4]:-1;
     p_init[5] = (nr_given_params >= 6) ?  param_init[5]:-1;
-    p_init[6] = (nr_given_params >= 7) ?  param_init[6]:0; // angle is special as any value (-infty,infty) can make sense
+    // Angle is special as any value (-infty,infty) can make sense.
+    // Also we convert it from degrees to radian here, which is the input needed by fitPSF.
+    p_init[6] = (nr_given_params >= 7) ?  param_init[6]*M_PI/180.:0;
     
     // Built coordinate system to use
     std::vector<int> xCoords(img.nCols);
@@ -197,7 +204,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     convert_Qs_To_SxSyAngle( results[4], results[5], results[6], sigma_x, sigma_y, angle);
     fin_params[4] = sigma_x;       
 	fin_params[5] = sigma_y;
-	fin_params[6] = angle;
+	fin_params[6] = angle*180./M_PI; // back-convert from radian to degree;
     
     
     // exit state of optimizer

@@ -32,6 +32,11 @@ elseif isunix
     % As Matlab loads its own STL before the system libraries (by
     % setting LD_LIBRARY_PATH to the MATLAB library path) this will result
     % in failures when the mex file (shared library) is called.
+    %
+    % If you encounter invalid mex files while executing the program, or
+    % runtime linking errors try setting the LD_PRELOAD environment variable 
+    % before starting matlab to your system libraries (where libstdc++ and
+    % libgfortran are located.
     mex -Lceres-windows/ceres-solver/build/lib/ -lceres -lpthread -lglog ...
     LDFLAGS='\$LDFLAGS -Wl,-rpath -Wl,''\\\$ORIGIN'' -fopenmp'  ...
     CXXFLAGS="\$CXXFLAGS -fopenmp -std=c++11 ...
