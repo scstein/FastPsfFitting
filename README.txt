@@ -11,8 +11,10 @@ The fitting code uses the ceres-solver library for optimization which is develop
 
 -- Pre-compiled files for Windows 7 64-bit and Linux (compiled with Kubuntu 14.4) --
 
-Compiled mex files for 64-bit Windows built using Visual Studio Professional 2012 and Linux (Kubuntu 14.4) using g++ 4.8.4 can be downloaded from:
-     https://drive.google.com/file/d/0BzFq6JJEnf3fMFdUbGNNaDdyUDg/view?usp=sharing
+Compiled mex files for 64-bit Windows built using Visual Studio Professional 2012 can be downloaded from:
+	https://drive.google.com/file/d/0BzFq6JJEnf3fTVlDdkhjLWlVY0E/view?usp=sharing
+Compiled mex files for Linux (in my case Kubuntu 14.4) using g++ 4.8.4 can be downloaded from:
+	https://drive.google.com/file/d/0BzFq6JJEnf3fMUg0LWFtY0FpVGs/view?usp=sharing
 
 % WINDOWS NOTE	 
 	For the precompiled mex files to work you may need the "Visual C++ Redistributable for Visual Studio 2012 Update 4" which you can download from www.microsoft.com. 
