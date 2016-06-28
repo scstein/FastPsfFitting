@@ -277,11 +277,13 @@ public:
             nr_optim_params_ += (param_optimMask_[i]);
         
         // Set infinitesimals of constant parameters to zero
-        if(param_optimMask_[0]) xpos_.v[0] = 0;
-        if(param_optimMask_[1]) ypos_.v[1] = 0;
-        if(param_optimMask_[2]) A_.v[2] = 0;
-        if(param_optimMask_[3]) BG_.v[3] = 0;
-        if(param_optimMask_[4]) q_1_.v[4] = 0;
+        if(!param_optimMask_[0]) xpos_.v[0] = 0;
+        if(!param_optimMask_[1]) ypos_.v[1] = 0;
+        if(!param_optimMask_[2]) A_.v[2] = 0;
+        if(!param_optimMask_[3]) BG_.v[3] = 0;
+        if(!param_optimMask_[4]) q_1_.v[4] = 0;
+        
+        if(BG_.a < 0.01) BG_.a = 0.01;
     }
     
     virtual bool Evaluate(const double* parameters,
@@ -334,10 +336,18 @@ public:
         
         T cost(0.0);
         T model_val(0.0);
+        
+        // Cap background at minimum 
+        T BG_cp;
+        if( BG < T(0.01) )
+            BG_cp = T(0.01);
+        else
+            BG_cp = BG;
+        
         for(unsigned int iCol = 0; iCol<I_.nCols; ++iCol)
             for(unsigned int iRow = 0; iRow<I_.nRows; ++iRow)
             {
-                model_val = A*xVals[iCol]*yVals[iRow] + BG + 1e-14;
+                model_val = A*xVals[iCol]*yVals[iRow] + BG_cp;
                 cost -= I_(iRow,iCol) * log(model_val) - model_val;
             }
         
@@ -373,12 +383,12 @@ public:
             nr_optim_params_ += (param_optimMask_[i]);
         
         // Set infinitesimals of constant parameters to zero
-        if(param_optimMask_[0]) xpos_.v[0] = 0;
-        if(param_optimMask_[1]) ypos_.v[1] = 0;
-        if(param_optimMask_[2]) A_.v[2] = 0;
-        if(param_optimMask_[3]) BG_.v[3] = 0;
-        if(param_optimMask_[4]) q_1_.v[4] = 0;
-		if(param_optimMask_[5]) q_2_.v[5] = 0;
+        if(!param_optimMask_[0]) xpos_.v[0] = 0;
+        if(!param_optimMask_[1]) ypos_.v[1] = 0;
+        if(!param_optimMask_[2]) A_.v[2] = 0;
+        if(!param_optimMask_[3]) BG_.v[3] = 0;
+        if(!param_optimMask_[4]) q_1_.v[4] = 0;
+		if(!param_optimMask_[5]) q_2_.v[5] = 0;
     }
     
     virtual bool Evaluate(const double* parameters,
@@ -431,12 +441,19 @@ public:
         for(unsigned int iRow = 0; iRow<I_.nRows; ++iRow)
             yVals[iRow] = exp( -(ypos-T(y_[iRow]))*(ypos-T(y_[iRow]))*q_2 );
         
+        // Cap background at minimum 
+        T BG_cp;
+        if( BG < T(0.01) )
+            BG_cp = T(0.01);
+        else
+            BG_cp = BG;
+        
         T cost(0.0);
         T model_val(0.0);
         for(unsigned int iCol = 0; iCol<I_.nCols; ++iCol)
             for(unsigned int iRow = 0; iRow<I_.nRows; ++iRow)
             {
-                model_val = A*xVals[iCol]*yVals[iRow] + BG + 1e-14;
+                model_val = A*xVals[iCol]*yVals[iRow] + BG_cp;
                 cost -= I_(iRow,iCol) * log(model_val) - model_val;
             }
         
@@ -472,13 +489,13 @@ public:
             nr_optim_params_ += (param_optimMask_[i]);
         
         // Set infinitesimals of constant parameters to zero
-        if(param_optimMask_[0]) xpos_.v[0] = 0;
-        if(param_optimMask_[1]) ypos_.v[1] = 0;
-        if(param_optimMask_[2]) A_.v[2] = 0;
-        if(param_optimMask_[3]) BG_.v[3] = 0;
-        if(param_optimMask_[4]) q_1_.v[4] = 0;
-		if(param_optimMask_[5]) q_2_.v[5] = 0;
-		if(param_optimMask_[6]) q_3_.v[6] = 0;
+        if(!param_optimMask_[0]) xpos_.v[0] = 0;
+        if(!param_optimMask_[1]) ypos_.v[1] = 0;
+        if(!param_optimMask_[2]) A_.v[2] = 0;
+        if(!param_optimMask_[3]) BG_.v[3] = 0;
+        if(!param_optimMask_[4]) q_1_.v[4] = 0;
+		if(!param_optimMask_[5]) q_2_.v[5] = 0;
+		if(!param_optimMask_[6]) q_3_.v[6] = 0;
     }
     
     virtual bool Evaluate(const double* parameters,
@@ -533,12 +550,19 @@ public:
         for(unsigned int iRow = 0; iRow<I_.nRows; ++iRow)
             yVals[iRow] = exp( -(ypos-T(y_[iRow]))*(ypos-T(y_[iRow]))*q_2 );
         
+        // Cap background at minimum 
+        T BG_cp;
+        if( BG < T(0.01) )
+            BG_cp = T(0.01);
+        else
+            BG_cp = BG;
+        
         T cost(0.0);
         T model_val(0.0);
         for(unsigned int iCol = 0; iCol<I_.nCols; ++iCol)
             for(unsigned int iRow = 0; iRow<I_.nRows; ++iRow)
             {
-                model_val = A*xVals[iCol]*yVals[iRow]*exp(T(2.)*q_3*(xpos-T(x_[iCol])*(ypos-T(y_[iRow])))) + BG + 1e-14;
+                model_val = A*xVals[iCol]*yVals[iRow]*exp(T(2.)*q_3*(xpos-T(x_[iCol])*(ypos-T(y_[iRow])))) + BG_cp;
                 cost -= I_(iRow,iCol) * log(model_val) - model_val;
             }
         
@@ -574,11 +598,11 @@ public:
             nr_optim_params_ += (param_optimMask_[i]);
         
         // Set infinitesimals of constant parameters to zero
-        if(param_optimMask_[0]) xpos_.v[0] = 0;
-        if(param_optimMask_[1]) ypos_.v[1] = 0;
-        if(param_optimMask_[2]) A_.v[2] = 0;
-        if(param_optimMask_[3]) BG_.v[3] = 0;
-        if(param_optimMask_[4]) q_1_.v[4] = 0;
+        if(!param_optimMask_[0]) xpos_.v[0] = 0;
+        if(!param_optimMask_[1]) ypos_.v[1] = 0;
+        if(!param_optimMask_[2]) A_.v[2] = 0;
+        if(!param_optimMask_[3]) BG_.v[3] = 0;
+        if(!param_optimMask_[4]) q_1_.v[4] = 0;
     }
     
     virtual bool Evaluate(const double* parameters,
@@ -628,12 +652,19 @@ public:
         for(unsigned int iRow = 0; iRow<I_.nRows; ++iRow)
             yVals[iRow] = ( erfc<T>(-(T(y_[iRow])-ypos+T(0.5))*sqrt(q_1)) - erfc<T>(-(T(y_[iRow])-ypos-T(0.5))*sqrt(q_1)) );
         
+        // Cap background at minimum 
+        T BG_cp;
+        if( BG < T(0.01) )
+            BG_cp = T(0.01);
+        else
+            BG_cp = BG;
+        
         T cost(0.0);
         T model_val (0.0);
         for(unsigned int iCol = 0; iCol<I_.nCols; ++iCol)
             for(unsigned int iRow = 0; iRow<I_.nRows; ++iRow)
             {
-                model_val = A*M_PI/(T(4.)*q_1) * xVals[iCol]*yVals[iRow] + BG   + 1e-14;
+                model_val = A*M_PI/(T(4.)*q_1) * xVals[iCol]*yVals[iRow] + BG_cp;
                 cost -= I_(iRow,iCol) * log(model_val) - model_val;
                 // Note -= because we evaluate the negative log likelihood
             }
@@ -670,12 +701,12 @@ public:
             nr_optim_params_ += (param_optimMask_[i]);
         
         // Set infinitesimals of constant parameters to zero
-        if(param_optimMask_[0]) xpos_.v[0] = 0;
-        if(param_optimMask_[1]) ypos_.v[1] = 0;
-        if(param_optimMask_[2]) A_.v[2] = 0;
-        if(param_optimMask_[3]) BG_.v[3] = 0;
-        if(param_optimMask_[4]) q_1_.v[4] = 0;
-		if(param_optimMask_[5]) q_2_.v[5] = 0;
+        if(!param_optimMask_[0]) xpos_.v[0] = 0;
+        if(!param_optimMask_[1]) ypos_.v[1] = 0;
+        if(!param_optimMask_[2]) A_.v[2] = 0;
+        if(!param_optimMask_[3]) BG_.v[3] = 0;
+        if(!param_optimMask_[4]) q_1_.v[4] = 0;
+		if(!param_optimMask_[5]) q_2_.v[5] = 0;
     }
     
     virtual bool Evaluate(const double* parameters,
@@ -727,12 +758,19 @@ public:
         for(unsigned int iRow = 0; iRow<I_.nRows; ++iRow)
             yVals[iRow] = ( erfc<T>(-(T(y_[iRow])-ypos+T(0.5))*sqrt(q_2)) - erfc<T>(-(T(y_[iRow])-ypos-T(0.5))*sqrt(q_2)) );
         
+        // Cap background at minimum 
+        T BG_cp;
+        if( BG < T(0.01) )
+            BG_cp = T(0.01);
+        else
+            BG_cp = BG;
+        
         T cost(0.0);
         T model_val (0.0);
         for(unsigned int iCol = 0; iCol<I_.nCols; ++iCol)
             for(unsigned int iRow = 0; iRow<I_.nRows; ++iRow)
             {
-                model_val = A*M_PI/(T(4.)*sqrt(q_1*q_2)) * xVals[iCol]*yVals[iRow] + BG   + 1e-14;
+                model_val = A*M_PI/(T(4.)*sqrt(q_1*q_2)) * xVals[iCol]*yVals[iRow] + BG_cp;
                 cost -= I_(iRow,iCol) * log(model_val) - model_val;
                 // Note -= because we evaluate the negative log likelihood
             }

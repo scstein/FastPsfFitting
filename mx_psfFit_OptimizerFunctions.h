@@ -312,7 +312,13 @@ fitPSF(Array2D& img, std::vector<int>& xCoords, std::vector<int>& yCoords, std::
           if(param_optimMask[0]) {xpos  = parameters[cnt]; ++cnt;}
           if(param_optimMask[1]) {ypos  = parameters[cnt]; ++cnt;}
           if(param_optimMask[2]) {A     = parameters[cnt]; ++cnt;}
-          if(param_optimMask[3]) {BG    = parameters[cnt]; ++cnt;}
+          if(param_optimMask[3]) {
+              // Minimum Background for MLE is 0.1 (see cost functions)
+              if( parameters[cnt] < 0.01)
+                  BG = 0.01;
+              else
+                  BG    = parameters[cnt]; ++cnt;
+          }
           if(param_optimMask[4]) {q_1 = parameters[cnt]; ++cnt;}
 		  if(param_optimMask[5]) {q_2 = parameters[cnt]; ++cnt;}
 		  if(param_optimMask[6]) {q_3 = parameters[cnt]; ++cnt;}
